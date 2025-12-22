@@ -1,0 +1,117 @@
+@import "tailwindcss";
+
+/* App Color Theme Variables */
+:root {
+  /* Primary Colors */
+  --primary-blue: #002B7E;
+  --primary-blue-light: #1A47A3;
+  --accent-orange: #FF6B00;
+  
+  /* Background & Surface */
+  --background-light: #F6F7F8;
+  --surface-white: #FFFFFF;
+  
+  /* Text Colors */
+  --text-dark: #212121;
+  --text-medium: #757575;
+  --text-light: #999999;
+  --text-on-primary: #FFFFFF;
+  
+  /* Status Colors */
+  --success-green: #388E3C;
+  --error-red: #D32F2F;
+  
+  /* Borders & Dividers */
+  --divider-gray: #E0E0E0;
+  --input-border: #E0E0E0;
+  
+  /* Legacy variables for compatibility */
+  --background: #F6F7F8;
+  --foreground: #212121;
+}
+
+/* Remove dark mode - force light theme */
+body {
+  background: var(--background-light);
+  color: var(--text-dark);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+}
+
+/* Ensure all text is visible - but allow explicit color classes to override */
+* {
+  color: inherit;
+}
+
+/* Override any dark mode settings */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #F6F7F8;
+    --foreground: #212121;
+  }
+  
+  body {
+    background: var(--background-light);
+    color: var(--text-dark);
+  }
+}
+
+/* Utility classes matching your theme */
+.bg-primary {
+  background-color: var(--primary-blue);
+}
+
+.bg-primary-light {
+  background-color: var(--primary-blue-light);
+}
+
+.bg-accent {
+  background-color: var(--accent-orange);
+}
+
+.text-primary {
+  color: var(--primary-blue);
+}
+
+.text-accent {
+  color: var(--accent-orange);
+}
+
+/* Fix for white text on colored backgrounds */
+.text-white,
+.text-on-primary {
+  color: var(--text-on-primary) !important;
+}
+
+.border-primary {
+  border-color: var(--primary-blue);
+}
+
+/* Ensure input elements are visible */
+input, textarea, select {
+  background-color: var(--surface-white);
+  color: var(--text-dark);
+  border-color: var(--input-border);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-medium);
+}
+
+/* Button styles */
+button {
+  cursor: pointer;
+}
+
+/* Link styles */
+a {
+  color: var(--primary-blue);
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--primary-blue-light);
+}
