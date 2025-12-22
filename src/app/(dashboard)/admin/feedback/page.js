@@ -2,7 +2,7 @@
 'use client';
 
 import { useState } from 'react';
-import { db, storage } from '@/lib/firebase/config';
+import { db, storage } from '@/lib/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { FiUpload, FiX, FiAlertCircle, FiCheckCircle, FiImage, FiSend, FiHeart } from 'react-icons/fi';
