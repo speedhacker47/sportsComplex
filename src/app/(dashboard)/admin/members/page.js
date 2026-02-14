@@ -450,17 +450,30 @@ const UserRegistrationPage = () => {
     setFormData(initialFormData);
   };
   
+  // ... existing code ...
   const openEditModal = async (userToEdit) => {
     setSelectedUser(userToEdit);
     setFormData({
-      name: userToEdit.name, email: userToEdit.email, mobile: userToEdit.mobile, dob: userToEdit.dobForInput,
-      gender: userToEdit.gender, fatherName: userToEdit.fatherName, address: userToEdit.address,
-      aadharNo: userToEdit.aadharNo, facilityId: '', planType: 'oneMonth',
+      // FIX: Add || '' to every field to prevent 'undefined' errors
+      name: userToEdit.name || '',
+      email: userToEdit.email || '',
+      mobile: userToEdit.mobile || '',
+      dob: userToEdit.dobForInput || '',
+      gender: userToEdit.gender || 'Male', // Default to 'Male' if missing, or '' if you prefer
+      fatherName: userToEdit.fatherName || '',
+      address: userToEdit.address || '',
+      aadharNo: userToEdit.aadharNo || '',
+      facilityId: '',
+      planType: 'oneMonth',
       startDate: new Date().toISOString().split('T')[0],
+      isRegistration: false, // Ensure this flag exists in edit mode
+      utrNumber: '',
+      qrCodeId: ''
     });
     await loadUserSubscriptionsAndPayments(userToEdit.id);
     setShowEditModal(true);
   };
+// ... existing code ...
   
   const closeEditModal = () => {
     setShowEditModal(false);
