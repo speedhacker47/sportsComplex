@@ -116,7 +116,11 @@ const UserRegistrationPage = () => {
 
   // Load Users with NEW TABLE STRUCTURE
   const loadUsers = useCallback(async (mapToUse) => {
-    if (!mapToUse || mapToUse.size === 0) return;
+  // REMOVED THE BLOCKING IF STATEMENT
+  // if (!mapToUse || mapToUse.size === 0) return; 
+
+  // Add this safety check instead so the code doesn't crash if map is null
+  const facilityMap = mapToUse || new Map(); 
     try {
       const usersQuery = query(collection(db, 'users'));
       const usersSnap = await getDocs(usersQuery);
@@ -147,7 +151,7 @@ const UserRegistrationPage = () => {
         const expiredSubscriptions = [];
 
         facilitySubscriptionsMap.forEach((sub, facilityId) => {
-          const facilityName = mapToUse.get(facilityId)?.name || 'Unknown';
+          const facilityName = facilityMap.get(facilityId)?.name || 'Unknown';
           const endDate = sub.endDate instanceof Timestamp ? sub.endDate.toDate() : new Date(sub.endDate);
           const isActive = endDate >= today;
           
@@ -385,7 +389,7 @@ const UserRegistrationPage = () => {
         nextInvoiceNo = `INV${currentYear}${paddedNum}`;
         transaction.update(paymentInfoRef, { lastInvoice: nextInvoiceNum });
       });
-      const newRegNumber = `SPC${String(nextRegNum).padStart(4, '0')}`;
+      const newRegNumber = `SPC${String(nextRegNum).padStart(5, '0')}`;
       const userData = {
         name: formData.name, 
         email: formData.email || '', 
