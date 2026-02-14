@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { CreditCard, History, User, Building2, CheckCircle, AlertCircle, X, Search, Calendar, Filter, Eye, XCircle, Check, Printer, Edit, Trash2, Save, Plus, Download, FileDown } from 'lucide-react';
+import { CreditCard, History, User, Building2, CheckCircle, AlertCircle, X, Search, Calendar, Filter, Eye, XCircle, Check, Printer, Edit, Trash2, Save, Plus, Download, FileDown, GraduationCap } from 'lucide-react';
 import { db } from '../../../lib/firebase'; 
 import {
   collection,
@@ -28,13 +28,6 @@ const formatTimestamp = (timestamp) => {
   });
 };
 
-// Generate Invoice Number based on payment index
-const generateInvoiceNumber = (paymentIndex, paymentDate) => {
-  const month = paymentDate ? paymentDate.toDate().getMonth() : new Date().getMonth();
-  const paddedIndex = String(paymentIndex + 1).padStart(4, '0');
-  return `INV-${month}-${paddedIndex}`;
-};
-
 // Print Receipt Function
 const printReceipt = (payment) => {
   const printWindow = window.open('', '_blank');
@@ -47,7 +40,7 @@ const printReceipt = (payment) => {
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Payment Receipt - ${payment.invoiceNo || payment.invoiceNumber}</title>
+  <title>Payment Receipt - ${payment.invoiceNo || payment.id}</title>
   <style>
     @page {
       size: A5;
@@ -226,12 +219,12 @@ const printReceipt = (payment) => {
       </div>
       <div style="text-align: right;">
         <div class="receipt-badge">RECEIPT</div>
-        <div style="font-size: 9px; margin-top: 2px; color: #666;">${payment.invoiceNo || payment.invoiceNumber}</div>
+        <div style="font-size: 9px; margin-top: 2px; color: #666;">${payment.invoiceNo || payment.id}</div>
       </div>
     </div>
 
     <div class="content-wrapper">
-      <div class="section-title">Payment Details</div>
+      <div class="section-title">Academy Payment Details</div>
       
       <div class="line-item">
         <span class="label">Date:</span>
@@ -249,14 +242,20 @@ const printReceipt = (payment) => {
       </div>
 
       <div class="line-item">
-        <span class="label">Facility / Purpose:</span>
-        <span class="value">${payment.facility?.name || payment.facilityId || 'General Subscription'}</span>
+        <span class="label">Academy:</span>
+        <span class="value">${payment.academy?.name || payment.academyId || 'Academy Subscription'}</span>
       </div>
 
-      ${payment.month && payment.month.length > 0 ? `
+      ${payment.months && payment.months.length > 0 ? `
       <div class="line-item">
         <span class="label">Months Covered:</span>
-        <span class="value">${payment.month.join(', ')}</span>
+        <span class="value">${payment.months.join(', ')}</span>
+      </div>` : ''}
+
+      ${payment.durationNumeric ? `
+      <div class="line-item">
+        <span class="label">Duration:</span>
+        <span class="value">${payment.durationNumeric} Month(s)</span>
       </div>` : ''}
 
       <div class="line-item">
@@ -267,11 +266,6 @@ const printReceipt = (payment) => {
       <div class="line-item">
         <span class="label">Txn ID:</span>
         <span class="value" style="font-size: 9px;">${payment.transactionId || payment.id || '-'}</span>
-      </div>
-
-      <div class="line-item">
-        <span class="label">Plan:</span>
-        <span class="value">${payment.subscription?.planType || payment.planType || 'Standard'}</span>
       </div>
 
       <div class="line-item">
@@ -351,7 +345,7 @@ const EditPaymentModal = ({ isOpen, onClose, payment, onSave, loading }) => {
         method: payment.method || 'Cash',
         status: payment.status || 'pending',
         paymentDate: dateStr,
-        months: Array.isArray(payment.month) ? payment.month : []
+        months: Array.isArray(payment.months) ? payment.months : [] // Using 'months'
       });
     }
   }, [payment]);
@@ -385,7 +379,7 @@ const EditPaymentModal = ({ isOpen, onClose, payment, onSave, loading }) => {
       <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
         <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center sticky top-0 bg-white z-10">
           <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-            <Edit size={20} /> Edit Payment
+            <Edit size={20} /> Edit Academy Payment
           </h2>
           <button onClick={onClose}><X size={20} className="text-gray-500 hover:text-gray-700" /></button>
         </div>
@@ -520,7 +514,7 @@ const EditPaymentModal = ({ isOpen, onClose, payment, onSave, loading }) => {
   );
 };
 
-const PaymentDetailsModal = ({ isOpen, onClose, payment, user, facility, subscription }) => {
+const PaymentDetailsModal = ({ isOpen, onClose, payment, user, academy }) => {
   if (!isOpen || !payment) return null;
 
   return (
@@ -540,6 +534,10 @@ const PaymentDetailsModal = ({ isOpen, onClose, payment, user, facility, subscri
             <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
               <p className="text-sm font-medium text-gray-600">Transaction ID</p>
               <p className="text-lg font-semibold text-gray-900">{payment.transactionId || payment.id || 'N/A'}</p>
+            </div>
+            <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <p className="text-sm font-medium text-gray-600">Invoice No</p>
+              <p className="text-lg font-semibold text-gray-900">{payment.invoiceNo || 'N/A'}</p>
             </div>
             <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
               <p className="text-sm font-medium text-gray-600">Amount</p>
@@ -569,11 +567,11 @@ const PaymentDetailsModal = ({ isOpen, onClose, payment, user, facility, subscri
                 <p className="text-lg font-semibold text-gray-900">{payment.qrCodeName}</p>
               </div>
             )}
-             {payment.month && payment.month.length > 0 && (
+             {payment.months && payment.months.length > 0 && (
                <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 col-span-2">
                 <p className="text-sm font-medium text-gray-600">Months Covered</p>
                 <div className="flex flex-wrap gap-2 mt-1">
-                    {payment.month.map((m, i) => (
+                    {payment.months.map((m, i) => (
                         <span key={i} className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded border border-blue-200 font-medium">
                             {m}
                         </span>
@@ -602,20 +600,20 @@ const PaymentDetailsModal = ({ isOpen, onClose, payment, user, facility, subscri
           </div>
 
           <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
-            <Building2 size={20} /> Facility & Subscription
+            <GraduationCap size={20} /> Academy & Subscription
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-              <p className="text-sm font-medium text-gray-600">Facility Name</p>
-              <p className="text-md font-semibold text-gray-900">{facility?.name || 'N/A'}</p>
+              <p className="text-sm font-medium text-gray-600">Academy Name</p>
+              <p className="text-md font-semibold text-gray-900">{academy?.name || 'N/A'}</p>
+            </div>
+             <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <p className="text-sm font-medium text-gray-600">Duration</p>
+              <p className="text-md font-semibold text-gray-900">{payment.durationNumeric ? `${payment.durationNumeric} Month(s)` : 'N/A'}</p>
             </div>
             <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-              <p className="text-sm font-medium text-gray-600">Plan Type</p>
-              <p className="text-md font-semibold text-gray-900">{subscription?.planType || payment.planType || 'N/A'}</p>
-            </div>
-            <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-              <p className="text-sm font-medium text-gray-600">Subscription ID</p>
-              <p className="text-md font-semibold text-gray-900">{payment.subscriptionId || 'N/A'}</p>
+              <p className="text-sm font-medium text-gray-600">Subscription Ref</p>
+              <p className="text-xs text-gray-500 break-all">{payment.subscription || 'N/A'}</p>
             </div>
           </div>
         </div>
@@ -635,20 +633,20 @@ const PaymentDetailsModal = ({ isOpen, onClose, payment, user, facility, subscri
 };
 
 
-const PaymentsPage = () => {
+const AcademyPaymentsPage = () => {
   const [payments, setPayments] = useState([]);
   const [dataLoading, setDataLoading] = useState(true);
   const [alert, setAlert] = useState({ show: false, type: '', message: '' });
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
-  const [filterFacility, setFilterFacility] = useState('all');
+  const [filterAcademy, setFilterAcademy] = useState('all');
   const [filterPeriod, setFilterPeriod] = useState('all');
   const [selectedMonth, setSelectedMonth] = useState('');
   const [selectedYear, setSelectedYear] = useState('');
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedPaymentDetails, setSelectedPaymentDetails] = useState(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [facilities, setFacilities] = useState([]);
+  const [academies, setAcademies] = useState([]);
   const [actionLoading, setActionLoading] = useState(null);
 
   // NEW: Month/Year selector for data fetching
@@ -662,18 +660,26 @@ const PaymentsPage = () => {
 
   useEffect(() => {
     loadPayments();
-  }, [fetchMonth, fetchYear]); // Reload when month/year changes
+  }, [fetchMonth, fetchYear]);
 
   const loadPayments = async () => {
     setDataLoading(true);
     try {
-      // Calculate start and end of selected month
       const startOfMonth = new Date(fetchYear, fetchMonth, 1);
       const endOfMonth = new Date(fetchYear, fetchMonth + 1, 0, 23, 59, 59, 999);
 
-      const paymentsRef = collection(db, 'payments');
+      // 1. Fetch Academy Names first for mapping
+      const academiesRef = collection(db, 'academies');
+      const academiesSnap = await getDocs(academiesRef);
+      const academyMap = {};
+      academiesSnap.forEach(doc => {
+          academyMap[doc.id] = doc.data().name;
+      });
+      setAcademies(Object.values(academyMap));
+
+      // 2. Fetch Payments
+      const paymentsRef = collection(db, 'academyPayments'); // Using academyPayments collection
       
-      // Query with date range to limit documents fetched
       const q = query(
         paymentsRef,
         where('paymentDate', '>=', Timestamp.fromDate(startOfMonth)),
@@ -688,9 +694,9 @@ const PaymentsPage = () => {
           const payment = { id: paymentDoc.id, ...paymentDoc.data() };
 
           let userData = null;
-          let facilityData = null;
-          let subscriptionData = null;
+          let academyData = null;
 
+          // Fetch User Details
           if (payment.userId) {
             if (typeof payment.userId.get === 'function') {
                 const userDoc = await getDoc(payment.userId);
@@ -709,6 +715,7 @@ const PaymentsPage = () => {
                     if (userDoc.exists()) {
                         userData = { id: userDoc.id, ...userDoc.data() };
                     } else {
+                         // Try guest if user not found
                         const guestDoc = await getDoc(doc(db, 'guests', payment.userId));
                         if (guestDoc.exists()) {
                             userData = { id: guestDoc.id, ...guestDoc.data(), isGuest: true };
@@ -718,55 +725,32 @@ const PaymentsPage = () => {
             }
           }
 
-          if (payment.facilityId && typeof payment.facilityId.get === 'function') {
-            const facilityDoc = await getDoc(payment.facilityId); 
-            if (facilityDoc.exists()) {
-              facilityData = { id: facilityDoc.id, ...facilityDoc.data() };
-            }
-          } else if (typeof payment.facilityId === 'string') {
-                const facilityDoc = await getDoc(doc(db, 'facilities', payment.facilityId));
-                if (facilityDoc.exists()) {
-                    facilityData = { id: facilityDoc.id, ...facilityDoc.data() };
-                }
-            }
-
-          if (payment.subscriptionId && typeof payment.subscriptionId.get === 'function') {
-              const subscriptionDoc = await getDoc(payment.subscriptionId); 
-              if (subscriptionDoc.exists()) {
-                  subscriptionData = { id: subscriptionDoc.id, ...subscriptionDoc.data() };
-              }
-          } else if (typeof payment.subscriptionId === 'string') {
-              const parts = payment.subscriptionId.split('/');
-              if (parts.length >= 4 && parts[0] === 'users' && parts[2] === 'subscriptions') {
-                  const userId = parts[1];
-                  const subId = parts[3];
-                  if (userId && subId) {
-                      const subscriptionDoc = await getDoc(doc(db, 'users', userId, 'subscriptions', subId));
-                      if (subscriptionDoc.exists()) {
-                          subscriptionData = { id: subscriptionDoc.id, ...subscriptionDoc.data() };
-                      }
-                  }
-              }
+          // Resolve Academy Name using academyId
+          if (payment.academyId) {
+             const name = academyMap[payment.academyId];
+             if (name) {
+                 academyData = { id: payment.academyId, name: name };
+             } else {
+                 // Fallback fetch if not in initial map
+                 const academyDoc = await getDoc(doc(db, 'academies', payment.academyId));
+                 if(academyDoc.exists()) {
+                     academyData = { id: academyDoc.id, ...academyDoc.data() };
+                 }
+             }
           }
 
           return {
             ...payment,
             user: userData,
-            facility: facilityData,
-            subscription: subscriptionData,
+            academy: academyData,
           };
         })
       );
 
       setPayments(paymentsData);
       
-      const uniqueFacilities = [...new Set(paymentsData
-        .map(p => p.facility?.name || p.facilityId)
-        .filter(Boolean))];
-      setFacilities(uniqueFacilities);
-
     } catch (error) {
-      console.error('Error loading payments:', error);
+      console.error('Error loading academy payments:', error);
       setAlert({ show: true, type: 'error', message: 'Failed to load payments data.' });
     } finally {
       setDataLoading(false);
@@ -788,7 +772,7 @@ const PaymentsPage = () => {
     
     setActionLoading(paymentId);
     try {
-      await deleteDoc(doc(db, 'payments', paymentId));
+      await deleteDoc(doc(db, 'academyPayments', paymentId)); // Correct collection
       setPayments(prev => prev.filter(p => p.id !== paymentId));
       setAlert({ show: true, type: 'success', message: 'Payment deleted successfully.' });
     } catch (error) {
@@ -807,14 +791,14 @@ const PaymentsPage = () => {
   const handleSavePayment = async (id, updatedData) => {
     setActionLoading(id);
     try {
-      const paymentRef = doc(db, 'payments', id);
+      const paymentRef = doc(db, 'academyPayments', id); // Correct collection
       
       const updatePayload = {
         amount: updatedData.amount,
         transactionId: updatedData.transactionId,
         method: updatedData.method,
         status: updatedData.status,
-        month: updatedData.months,
+        months: updatedData.months, // Using 'months'
         paymentDate: Timestamp.fromDate(new Date(updatedData.paymentDate))
       };
 
@@ -841,7 +825,7 @@ const PaymentsPage = () => {
   const resetFilters = () => {
     setSearchTerm('');
     setFilterStatus('all');
-    setFilterFacility('all');
+    setFilterAcademy('all');
     setFilterPeriod('all');
     setSelectedMonth('');
     setSelectedYear('');
@@ -853,7 +837,7 @@ const PaymentsPage = () => {
 
     setActionLoading(paymentId);
     try {
-      const paymentRef = doc(db, 'payments', paymentId);
+      const paymentRef = doc(db, 'academyPayments', paymentId); // Correct collection
       await updateDoc(paymentRef, {
         status: newStatus
       });
@@ -875,13 +859,14 @@ const PaymentsPage = () => {
     const matchesSearch = (payment.transactionId?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
                           (payment.user?.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
                           String(payment.user?.mobile || '').includes(searchTerm) ||
+                          (payment.invoiceNo || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                           (payment.id || '').toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchesStatus = filterStatus === 'all' || payment.status === filterStatus;
     
-    const matchesFacility = filterFacility === 'all' || 
-                            payment.facility?.name === filterFacility ||
-                            payment.facilityId === filterFacility;
+    const matchesAcademy = filterAcademy === 'all' || 
+                            payment.academy?.name === filterAcademy ||
+                            payment.academyId === filterAcademy;
     
     let matchesDate = true;
     if (payment.paymentDate && filterPeriod !== 'all') {
@@ -898,7 +883,7 @@ const PaymentsPage = () => {
       }
     }
     
-    return matchesSearch && matchesStatus && matchesFacility && matchesDate;
+    return matchesSearch && matchesStatus && matchesAcademy && matchesDate;
   });
 
   const filteredStats = {
@@ -908,16 +893,16 @@ const PaymentsPage = () => {
     totalAmount: filteredPayments.reduce((sum, p) => sum + (p.amount || 0), 0)
   };
 
-  // Calculate facility-wise summary
-  const getFacilitySummary = () => {
+  // Calculate academy-wise summary
+  const getAcademySummary = () => {
     const summary = {};
     filteredPayments.forEach(payment => {
-      const facilityName = payment.facility?.name || payment.facilityId || 'Unknown';
-      if (!summary[facilityName]) {
-        summary[facilityName] = { count: 0, total: 0 };
+      const academyName = payment.academy?.name || payment.academyId || 'Unknown';
+      if (!summary[academyName]) {
+        summary[academyName] = { count: 0, total: 0 };
       }
-      summary[facilityName].count += 1;
-      summary[facilityName].total += payment.amount || 0;
+      summary[academyName].count += 1;
+      summary[academyName].total += payment.amount || 0;
     });
     return summary;
   };
@@ -927,24 +912,24 @@ const PaymentsPage = () => {
     setExportLoading(true);
     try {
       const monthName = new Date(fetchYear, fetchMonth).toLocaleString('default', { month: 'long' });
-      const facilitySummary = getFacilitySummary(); // Calculate summary data
+      const academySummary = getAcademySummary();
       
       const printWindow = window.open('', '_blank');
 
        const paymentsToExport = [...filteredPayments].sort((a, b) => a.paymentDate - b.paymentDate);
-      // Generate Rows for Main Table
+      
       const paymentRows = paymentsToExport.map((payment, index) => `
         <tr class="${index % 2 === 0 ? 'even' : 'odd'}">
           <td>
             <div class="txn-id">${payment.transactionId || payment.id || '-'}</div>
-            <div class="invoice-no">${payment.invoiceNo || payment.invoiceNumber || ''}</div>
+            <div class="invoice-no">${payment.invoiceNo || ''}</div>
           </td>
           <td>
             <div class="user-name">${payment.user?.name || '-'}</div>
             <div class="sub-text">${payment.user?.mobile || ''}</div>
           </td>
-          <td>${payment.facility?.name || payment.facilityId || '-'}</td>
-          <td>${payment.month && payment.month.length > 0 ? payment.month.join(', ') : '-'}</td>
+          <td>${payment.academy?.name || payment.academyId || '-'}</td>
+          <td>${payment.months && payment.months.length > 0 ? payment.months.join(', ') : '-'}</td>
           <td class="amount">₹${payment.amount || 0}</td>
           <td>${payment.method || '-'}</td>
           <td>${formatTimestamp(payment.paymentDate)}</td>
@@ -959,10 +944,9 @@ const PaymentsPage = () => {
         </tr>
       `).join('');
 
-      // Generate Rows for Summary Table
-      const summaryRows = Object.entries(facilitySummary).map(([facility, data]) => `
+      const summaryRows = Object.entries(academySummary).map(([academy, data]) => `
         <tr>
-          <td>${facility}</td>
+          <td>${academy}</td>
           <td style="text-align: center;">${data.count}</td>
           <td style="text-align: right;">₹${data.total.toLocaleString()}</td>
         </tr>
@@ -978,7 +962,7 @@ const PaymentsPage = () => {
         <!DOCTYPE html>
         <html>
         <head>
-          <title>Payment Report - ${monthName} ${fetchYear}</title>
+          <title>Academy Payment Report - ${monthName} ${fetchYear}</title>
           <style>
             @page { size: A4 landscape; margin: 10mm; }
             body { font-family: 'Helvetica', 'Arial', sans-serif; color: #333; margin: 0; padding: 0; font-size: 11px; }
@@ -991,7 +975,6 @@ const PaymentsPage = () => {
             .title-main { font-size: 16px; font-weight: bold; }
             .generated-date { font-size: 10px; color: #666; margin-top: 4px; }
             
-            /* Stats Cards */
             .stats-container { display: flex; gap: 15px; margin-bottom: 20px; }
             .stat-card { border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 15px; flex: 1; background: #f8fafc; }
             .stat-label { font-size: 10px; color: #64748b; text-transform: uppercase; font-weight: bold; }
@@ -1000,20 +983,17 @@ const PaymentsPage = () => {
             .stat-value.red { color: #991b1b; }
             .stat-value.blue { color: #1e40af; }
 
-            /* Tables */
             table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
             th { background-color: #2563eb; color: white; text-align: left; padding: 8px; font-size: 10px; text-transform: uppercase; }
             td { border-bottom: 1px solid #e2e8f0; padding: 6px 8px; vertical-align: middle; }
             tr.even { background-color: #f8fafc; }
             
-            /* Specific Column Styles */
             .txn-id { font-weight: bold; color: #333; }
             .invoice-no { font-size: 9px; color: #666; }
             .user-name { font-weight: 600; }
             .sub-text { font-size: 9px; color: #666; }
             .amount { font-weight: bold; color: #1e40af; }
             
-            /* Status Badges */
             .status-badge { padding: 3px 6px; border-radius: 4px; font-size: 9px; font-weight: bold; text-transform: uppercase; }
             .status-badge.success { background: #dcfce7; color: #166534; }
             .status-badge.failed { background: #fee2e2; color: #991b1b; }
@@ -1021,7 +1001,6 @@ const PaymentsPage = () => {
 
             .section-header { font-size: 12px; font-weight: bold; margin-bottom: 10px; color: #475569; border-left: 3px solid #2563eb; padding-left: 8px; }
             
-            /* Signature Section Styles */
             .signature-section { display: flex; justify-content: space-between; margin-top: 60px; padding: 0 50px; page-break-inside: avoid; }
             .sign-box { text-align: center; width: 200px; }
             .sign-line { border-bottom: 1px solid #333; height: 30px; margin-bottom: 5px; }
@@ -1047,12 +1026,11 @@ const PaymentsPage = () => {
               </div>
             </div>
             <div class="report-title">
-              <div class="title-main">Payment Report - ${monthName} ${fetchYear}</div>
+              <div class="title-main">Academy Payment Report - ${monthName} ${fetchYear}</div>
               <div class="generated-date">Generated: ${new Date().toLocaleString('en-GB')}</div>
             </div>
           </div>
 
-          <!-- Summary Stats -->
           <div class="stats-container">
             <div class="stat-card">
               <div class="stat-label">Total Txns</div>
@@ -1072,14 +1050,13 @@ const PaymentsPage = () => {
             </div>
           </div>
 
-          <!-- Main Data Table -->
           <div class="section-header">Detailed Transactions</div>
           <table>
             <thead>
               <tr>
                 <th width="15%">Transaction Details</th>
                 <th width="15%">User</th>
-                <th width="15%">Facility</th>
+                <th width="15%">Academy</th>
                 <th width="15%">Months</th>
                 <th width="10%">Amount</th>
                 <th width="10%">Method</th>
@@ -1092,13 +1069,12 @@ const PaymentsPage = () => {
             </tbody>
           </table>
 
-          <!-- Facility Summary Table -->
           <div style="page-break-inside: avoid;">
-            <div class="section-header">Summary by Facility / Game</div>
+            <div class="section-header">Summary by Academy</div>
             <table style="width: 60%;">
               <thead>
                 <tr>
-                  <th style="background-color: #166534;">Facility Name</th>
+                  <th style="background-color: #166534;">Academy Name</th>
                   <th style="background-color: #166534; text-align: center;">Count</th>
                   <th style="background-color: #166534; text-align: right;">Total Amount</th>
                 </tr>
@@ -1109,7 +1085,6 @@ const PaymentsPage = () => {
             </table>
           </div>
 
-          <!-- Signature Section -->
           <div class="signature-section">
             <div class="sign-box">
               <div class="sign-line"></div>
@@ -1132,7 +1107,6 @@ const PaymentsPage = () => {
           <script>
             window.onload = function() {
               window.print();
-              // window.onafterprint = function() { window.close(); };
             };
           </script>
         </body>
@@ -1140,7 +1114,7 @@ const PaymentsPage = () => {
       `;
 
       printWindow.document.write(htmlContent);
-      printWindow.document.close(); // Important for styles to load
+      printWindow.document.close();
       
       setAlert({ show: true, type: 'success', message: 'Print window opened successfully!' });
     } catch (error) {
@@ -1151,68 +1125,60 @@ const PaymentsPage = () => {
     }
   };
 
-  // Export to Excel
   const exportToExcel = () => {
     setExportLoading(true);
     try {
       const monthName = new Date(fetchYear, fetchMonth).toLocaleString('default', { month: 'long' });
       
-      // Prepare data for main sheet
       const excelData = filteredPayments.map(payment => ({
         'Transaction ID': payment.transactionId || payment.id || '',
-        'Invoice No': payment.invoiceNo || payment.invoiceNumber || '',
+        'Invoice No': payment.invoiceNo || '',
         'User Name': payment.user?.name || '',
         'User Mobile': payment.user?.mobile || '',
         'Reg No': payment.user?.isGuest ? 'GUEST' : (payment.user?.regNumber || ''),
-        'Facility': payment.facility?.name || payment.facilityId || '',
-        'Months': payment.month && payment.month.length > 0 ? payment.month.join(', ') : '',
+        'Academy': payment.academy?.name || payment.academyId || '',
+        'Months': payment.months && payment.months.length > 0 ? payment.months.join(', ') : '',
         'Amount (₹)': payment.amount || 0,
         'Method': payment.method || '',
         'Payment Date': formatTimestamp(payment.paymentDate),
         'Status': payment.status || '',
-        'Plan Type': payment.subscription?.planType || payment.planType || ''
+        'Subscription Ref': payment.subscription || ''
       }));
 
-      // Prepare summary data
-      const facilitySummary = getFacilitySummary();
-      const summaryData = Object.entries(facilitySummary).map(([facility, data]) => ({
-        'Facility/Game': facility,
+      const academySummary = getAcademySummary();
+      const summaryData = Object.entries(academySummary).map(([academy, data]) => ({
+        'Academy': academy,
         'Payment Count': data.count,
         'Total Amount (₹)': data.total
       }));
 
-      // Add overall summary
       summaryData.push({
-        'Facility/Game': 'GRAND TOTAL',
+        'Academy': 'GRAND TOTAL',
         'Payment Count': filteredStats.total,
         'Total Amount (₹)': filteredStats.totalAmount
       });
 
-      // Create workbook
       const wb = XLSX.utils.book_new();
       
-      // Main data sheet
       const ws1 = XLSX.utils.json_to_sheet(excelData);
       
-      // Set column widths
       ws1['!cols'] = [
-        { wch: 25 }, // Transaction ID
-        { wch: 20 }, // Invoice No
-        { wch: 25 }, // User Name
-        { wch: 15 }, // Mobile
-        { wch: 15 }, // Reg No
-        { wch: 25 }, // Facility
-        { wch: 30 }, // Months
-        { wch: 12 }, // Amount
-        { wch: 15 }, // Method
-        { wch: 20 }, // Date
-        { wch: 12 }, // Status
-        { wch: 15 }  // Plan Type
+        { wch: 25 },
+        { wch: 20 },
+        { wch: 25 },
+        { wch: 15 },
+        { wch: 15 },
+        { wch: 25 },
+        { wch: 30 },
+        { wch: 12 },
+        { wch: 15 },
+        { wch: 20 },
+        { wch: 12 },
+        { wch: 30 } 
       ];
       
-      XLSX.utils.book_append_sheet(wb, ws1, 'Payments');
+      XLSX.utils.book_append_sheet(wb, ws1, 'Academy Payments');
       
-      // Summary sheet
       const ws2 = XLSX.utils.json_to_sheet(summaryData);
       ws2['!cols'] = [
         { wch: 30 },
@@ -1221,8 +1187,7 @@ const PaymentsPage = () => {
       ];
       XLSX.utils.book_append_sheet(wb, ws2, 'Summary');
 
-      // Write file
-      XLSX.writeFile(wb, `Payment_Report_${monthName}_${fetchYear}.xlsx`);
+      XLSX.writeFile(wb, `Academy_Payment_Report_${monthName}_${fetchYear}.xlsx`);
       setAlert({ show: true, type: 'success', message: 'Excel exported successfully!' });
     } catch (error) {
       console.error('Error exporting Excel:', error);
@@ -1240,7 +1205,7 @@ const PaymentsPage = () => {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading payments data...</p>
+          <p className="mt-4 text-gray-600">Loading academy payments data...</p>
         </div>
       </div>
     );
@@ -1262,8 +1227,8 @@ const PaymentsPage = () => {
 
       <div className="mb-6 flex justify-between items-start">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Payment History</h1>
-          <p className="text-gray-600">View and manage all payment transactions</p>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Academy Payment History</h1>
+          <p className="text-gray-600">View and manage all academy payment transactions</p>
         </div>
         
         {/* Month/Year Selector */}
@@ -1347,7 +1312,6 @@ const PaymentsPage = () => {
             Reset All
           </button>
           
-          {/* Export Buttons */}
           <div className="flex gap-2 ml-4">
             <button
               onClick={exportToPDF}
@@ -1371,7 +1335,7 @@ const PaymentsPage = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
           <input
             type="text"
-            placeholder="Search by transaction ID, user name, or mobile..."
+            placeholder="Search by transaction ID, invoice, user name, or mobile..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -1391,13 +1355,13 @@ const PaymentsPage = () => {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
           <select
-            value={filterFacility}
-            onChange={(e) => setFilterFacility(e.target.value)}
+            value={filterAcademy}
+            onChange={(e) => setFilterAcademy(e.target.value)}
             className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
           >
-            <option value="all">All Facilities</option>
-            {facilities.map((facility, index) => (
-              <option key={index} value={facility}>{facility}</option>
+            <option value="all">All Academies</option>
+            {academies.map((academy, index) => (
+              <option key={index} value={academy}>{academy}</option>
             ))}
           </select>
 
@@ -1476,7 +1440,7 @@ const PaymentsPage = () => {
               <tr>
                 <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase">Transaction ID</th>
                 <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase">User Name</th>
-                <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase">Facility</th>
+                <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase">Academy</th>
                 <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase">Months</th>
                 <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
                 <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase">Method</th>
@@ -1493,35 +1457,29 @@ const PaymentsPage = () => {
                   </td>
                 </tr>
               ) : (
-                filteredPayments.map((payment, index) => {
+                filteredPayments.map((payment) => {
                   return (
                     <tr key={payment.id} className="hover:bg-gray-50">
                       <td className="px-2 py-4 text-xs text-gray-900">
                         <span className="font-medium">{payment.transactionId || payment.id}</span>
                         <br/>
-                        <span className="text-gray-500">{payment.invoiceNo || payment.invoiceNumber}</span>
+                        <span className="text-gray-500">{payment.invoiceNo || ''}</span>
                       </td>
                       <td className="px-2 py-4 text-sm text-gray-600">
                         {payment.user?.name || 'N/A'}
                         {payment.user?.isGuest && <span className="text-[10px] bg-gray-200 px-1 rounded ml-1 text-gray-600">Guest</span>}
                       </td>
-                      <td className="px-2 py-4 text-sm text-gray-600">{payment.facility?.name || payment.facilityId || 'N/A'}</td>
+                      <td className="px-2 py-4 text-sm text-gray-600">{payment.academy?.name || payment.academyId || 'N/A'}</td>
                       
                       <td className="px-2 py-4 text-xs text-gray-700">
-                        {payment.month && payment.month.length > 0 ? (
+                        {payment.months && payment.months.length > 0 ? (
                            <div className="flex flex-wrap gap-1 max-w-[200px]">
-                              {payment.month.map((m, i) => (
+                              {payment.months.map((m, i) => (
                                 <span key={i} className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-[10px] border border-gray-200 whitespace-nowrap">
                                   {m}
                                 </span>
                               ))}
                            </div>
-                        ) : payment.startDate && payment.endDate ? (
-                          <>
-                            <div>{payment.startDate.toDate().toLocaleDateString('en-GB', {day: '2-digit', month: 'short', year: '2-digit'})}</div>
-                            <div className="text-gray-400 text-[10px]">to</div>
-                            <div>{payment.endDate.toDate().toLocaleDateString('en-GB', {day: '2-digit', month: 'short', year: '2-digit'})}</div>
-                          </>
                         ) : (
                           <span className="text-gray-400">-</span>
                         )}
@@ -1613,8 +1571,7 @@ const PaymentsPage = () => {
         onClose={closeDetailsModal}
         payment={selectedPaymentDetails}
         user={selectedPaymentDetails?.user}
-        facility={selectedPaymentDetails?.facility}
-        subscription={selectedPaymentDetails?.subscription}
+        academy={selectedPaymentDetails?.academy}
       />
 
       <EditPaymentModal 
@@ -1628,4 +1585,4 @@ const PaymentsPage = () => {
   );
 };
 
-export default PaymentsPage;
+export default AcademyPaymentsPage;

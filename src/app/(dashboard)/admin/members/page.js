@@ -1,764 +1,991 @@
-// src/app/(dashboard)/admin/members/page.js
 'use client';
+import React, { useState, useEffect, useCallback } from 'react';
+import { User, Users, Calendar, AlertCircle, CheckCircle, X, Edit, RefreshCcw, QrCode, Trash2, Upload, Loader2, AlertTriangle, FileDown, Download } from 'lucide-react';
+import { db, storage } from '../../../lib/firebase.js'; 
+import {
+  collection, addDoc, getDocs, doc, query, orderBy, Timestamp, getDoc, updateDoc, where, limit, deleteDoc, runTransaction
+} from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import SubscriptionExtensionModal from './SubscriptionExtensionModal';
+import UserFormModal from './UserFormModal';
+import PaymentReceiptModal from './PaymentReceiptModal';
+import { useAuth } from '@/contexts/AuthContext';
+import * as XLSX from 'xlsx'; // Added for Excel Export
 
-import { useState, useEffect } from 'react';
-import { collection, getDocs, deleteDoc, doc, getDoc } from 'firebase/firestore';
-import { db } from '../../../lib/firebase';
-import { FiUser, FiMail, FiPhone, FiTrash2, FiCalendar, FiMapPin, FiEye, FiX, FiCreditCard, FiCheckCircle, FiXCircle } from 'react-icons/fi';
-
-export default function AdminMembersPage() {
-  const [members, setMembers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+const UserRegistrationPage = () => {
+  const { user: staffUser, loading: authLoading, isAdmin } = useAuth();
+  
+  // Existing State
+  const [facilities, setFacilities] = useState([]);
+  const [facilitiesMap, setFacilitiesMap] = useState(new Map());
+  const [users, setUsers] = useState([]);
+  const [showRegistrationModal, setShowRegistrationModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showExtensionModal, setShowExtensionModal] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [dataLoading, setDataLoading] = useState(true);
+  const [alert, setAlert] = useState({ show: false, type: '', message: '' });
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedFacilityFilter, setSelectedFacilityFilter] = useState(''); 
+  const [filterExpiryStatus, setFilterExpiryStatus] = useState('all'); 
+  const [filterAgeCategory, setFilterAgeCategory] = useState('all'); 
   const [filterGender, setFilterGender] = useState('all');
-  const [selectedMember, setSelectedMember] = useState(null);
-  const [modalLoading, setModalLoading] = useState(false);
-  const [memberDetails, setMemberDetails] = useState(null);
+  
+  // Export State
+  const [exportLoading, setExportLoading] = useState(false);
 
-  // Fetch members from Firebase
-  const fetchMembers = async () => {
+  // Selected User State
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [selectedUserSubscriptions, setSelectedUserSubscriptions] = useState([]);
+  const [selectedUserPayments, setSelectedUserPayments] = useState([]);
+  const [selectedFacilityForExtension, setSelectedFacilityForExtension] = useState('');
+
+  // Duplicate Check State
+  const [duplicateWarning, setDuplicateWarning] = useState({ show: false, user: null });
+
+  // Receipt State
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [receiptData, setReceiptData] = useState(null);
+  const [isGeneratingReceipt, setIsGeneratingReceipt] = useState(false); 
+
+  // QR CODE STATE
+  const [showQRModal, setShowQRModal] = useState(false);
+  const [qrCodes, setQrCodes] = useState([]);
+  const [qrName, setQrName] = useState('');
+  const [qrFile, setQrFile] = useState(null);
+  const [qrUploading, setQrUploading] = useState(false);
+
+  const initialFormData = {
+    name: '', email: '', mobile: '', dob: '', gender: 'Male',
+    fatherName: '', address: '', aadharNo: '', facilityId: '',
+    planType: 'oneMonth', startDate: new Date().toISOString().split('T')[0], isRegistration: true,
+    utrNumber: '', qrCodeId: ''
+  };
+  const [formData, setFormData] = useState(initialFormData);
+
+  // --- DELETE USER FUNCTION ---
+  const handleDeleteUser = async (userId) => {
+    if (!window.confirm("Are you sure you want to permanently delete this user? This action cannot be undone.")) return;
+
+    setLoading(true);
     try {
-      setLoading(true);
-      setError(null);
-      const membersRef = collection(db, 'users');
-      const snapshot = await getDocs(membersRef);
-      
-      const membersData = await Promise.all(
-        snapshot.docs.map(async (memberDoc) => {
-          const memberData = {
-            id: memberDoc.id,
-            ...memberDoc.data()
-          };
-
-          // Fetch registration info from registration/all subcollection
-          try {
-            const registrationAllRef = doc(db, 'users', memberDoc.id, 'registration', 'all');
-            const registrationAllDoc = await getDoc(registrationAllRef);
-            
-            if (registrationAllDoc.exists()) {
-              memberData.registration = registrationAllDoc.data();
-              console.log('Registration data found for user:', memberDoc.id, registrationAllDoc.data());
-            } else {
-              console.log('No registration document found for user:', memberDoc.id);
-            }
-          } catch (err) {
-            console.error('Error fetching registration for user:', memberDoc.id, err);
-          }
-
-          // Fetch subscriptions for each member
-          const subscriptionsRef = collection(db, 'users', memberDoc.id, 'subscriptions');
-          const subscriptionsSnapshot = await getDocs(subscriptionsRef);
-          
-          memberData.subscriptions = subscriptionsSnapshot.docs.map(subDoc => ({
-            id: subDoc.id,
-            ...subDoc.data()
-          }));
-
-          return memberData;
-        })
-      );
-      
-      // Sort by registration date (newest first)
-      membersData.sort((a, b) => {
-        const dateA = a.registration?.regDate;
-        const dateB = b.registration?.regDate;
-        
-        if (dateA && dateB) {
-          const parsedA = parseFirestoreDate(dateA);
-          const parsedB = parseFirestoreDate(dateB);
-          return parsedB - parsedA;
-        }
-        return 0;
-      });
-      
-      setMembers(membersData);
-    } catch (err) {
-      console.error('Error fetching members:', err);
-      setError('Failed to load members. Please try again.');
+      await deleteDoc(doc(db, 'users', userId));
+      setAlert({ show: true, type: 'success', message: 'User deleted successfully.' });
+      await loadUsers(facilitiesMap);
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      setAlert({ show: true, type: 'error', message: `Failed to delete user: ${error.message}` });
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchMembers();
+  // Load Facilities
+  const loadFacilities = useCallback(async () => {
+    try {
+      const facilitiesRef = collection(db, 'facilities');
+      const facilitiesSnap = await getDocs(facilitiesRef);
+      const facilitiesDataPromises = facilitiesSnap.docs.map(async (facilityDoc) => {
+        const facilityData = { id: facilityDoc.id, ...facilityDoc.data() };
+        const feesRef = collection(db, 'facilities', facilityDoc.id, 'fees');
+        const feesSnap = await getDocs(feesRef);
+        const feesData = {};
+        feesSnap.forEach(feeDoc => { feesData[feeDoc.id] = feeDoc.data(); });
+        facilityData.fees = feesData;
+        return facilityData;
+      });
+      const facilitiesData = await Promise.all(facilitiesDataPromises);
+      const tempFacilitiesMap = new Map();
+      facilitiesData.forEach(facility => { tempFacilitiesMap.set(facility.id, facility); });
+      setFacilities(facilitiesData);
+      setFacilitiesMap(tempFacilitiesMap);
+      return tempFacilitiesMap;
+    } catch (error) {
+      console.error('Error loading facilities:', error);
+      throw error;
+    }
   }, []);
 
-  // Fetch detailed member info including payment history
-  const fetchMemberDetails = async (member) => {
-    setModalLoading(true);
-    try {
-      // Fetch payment history
-      const paymentHistory = [];
-      
-      for (const subscription of member.subscriptions) {
-        if (subscription.paymentId) {
-          try {
-            let paymentDoc;
-            
-            // Check if it's a Firestore DocumentReference
-            if (subscription.paymentId.path) {
-              // It's a reference - use getDoc directly on the reference
-              paymentDoc = await getDoc(subscription.paymentId);
-            } 
-            // Fallback: if it's somehow a string path
-            else if (typeof subscription.paymentId === 'string') {
-              const paymentId = subscription.paymentId.replace(/^\//, '').split('/').pop();
-              const paymentRef = doc(db, 'payments', paymentId);
-              paymentDoc = await getDoc(paymentRef);
-            }
-            
-            if (paymentDoc && paymentDoc.exists()) {
-              paymentHistory.push({
-                id: paymentDoc.id,
-                ...paymentDoc.data(),
-                subscriptionId: subscription.id
-              });
-            }
-          } catch (err) {
-            console.error('Error fetching payment for subscription:', subscription.id, err);
-          }
-        }
-      }
+  useEffect(() => {
+    if (formData.planType === 'withoutReg') {
+      setFormData(prev => ({ ...prev, isRegistration: false }));
+    } else {
+      setFormData(prev => ({ ...prev, isRegistration: true }));
+    }
+  }, [formData.planType]);
 
-      setMemberDetails({
-        ...member,
-        paymentHistory: paymentHistory.sort((a, b) => {
-          const dateA = a.paymentDate ? parseFirestoreDate(a.paymentDate) : new Date(0);
-          const dateB = b.paymentDate ? parseFirestoreDate(b.paymentDate) : new Date(0);
-          return dateB - dateA;
-        })
+  // Load Users with NEW TABLE STRUCTURE
+  const loadUsers = useCallback(async (mapToUse) => {
+    if (!mapToUse || mapToUse.size === 0) return;
+    try {
+      const usersQuery = query(collection(db, 'users'));
+      const usersSnap = await getDocs(usersQuery);
+      
+      const enrichedUsersPromises = usersSnap.docs
+        .filter(doc => doc.id !== '000info') 
+        .map(async (userDoc) => {
+        const userData = userDoc.data();
+        const userId = userDoc.id;
+
+        const subscriptionsRef = collection(db, 'users', userId, 'subscriptions');
+        const subscriptionsSnap = await getDocs(query(subscriptionsRef, orderBy('createdAt', 'desc')));
+        const allSubscriptions = subscriptionsSnap.docs.map(doc => ({ 
+          id: doc.id, 
+          ...doc.data() 
+        }));
+
+        const facilitySubscriptionsMap = new Map();
+        allSubscriptions.forEach(sub => {
+          const facilityId = sub.facilityId;
+          if (!facilitySubscriptionsMap.has(facilityId)) {
+            facilitySubscriptionsMap.set(facilityId, sub);
+          }
+        });
+
+        const today = new Date();
+        const activeSubscriptions = [];
+        const expiredSubscriptions = [];
+
+        facilitySubscriptionsMap.forEach((sub, facilityId) => {
+          const facilityName = mapToUse.get(facilityId)?.name || 'Unknown';
+          const endDate = sub.endDate instanceof Timestamp ? sub.endDate.toDate() : new Date(sub.endDate);
+          const isActive = endDate >= today;
+          
+          const subInfo = {
+            facilityId,
+            facilityName,
+            endDate,
+            endDateStr: endDate.toLocaleDateString('en-GB'),
+            isActive
+          };
+
+          if (isActive) {
+            activeSubscriptions.push(subInfo);
+          } else {
+            expiredSubscriptions.push(subInfo);
+          }
+        });
+
+        activeSubscriptions.sort((a, b) => b.endDate - a.endDate);
+        expiredSubscriptions.sort((a, b) => b.endDate - a.endDate);
+
+        const displaySubscriptions = activeSubscriptions.length > 0 
+          ? activeSubscriptions 
+          : expiredSubscriptions.slice(0, 1);
+
+        let registrationExpiry = 'N/A';
+        if (activeSubscriptions.length > 0) {
+          const longestExpiry = activeSubscriptions[0].endDate;
+          const regExpiryDate = new Date(longestExpiry);
+          regExpiryDate.setMonth(regExpiryDate.getMonth() + 6);
+          registrationExpiry = regExpiryDate.toLocaleDateString('en-GB');
+        } else if (expiredSubscriptions.length > 0) {
+          registrationExpiry = 'Expired';
+        }
+
+        const dobParts = userData.dob ? userData.dob.split('/') : ['01', '01', '2000'];
+        const dobForInput = `${dobParts[2]}-${dobParts[1]}-${dobParts[0]}`;
+        const age = new Date().getFullYear() - parseInt(dobParts[2]);
+        const ageCategory = age < 18 ? 'Child' : age < 60 ? 'Adult' : 'Senior';
+
+        return {
+          id: userId,
+          regNumber: userData.regNumber || 'N/A',
+          name: userData.name || 'Unknown',
+          ageCategory,
+          registrationExpiry,
+          subscriptions: displaySubscriptions,
+          hasActiveSubscriptions: activeSubscriptions.length > 0,
+          allSubscriptions: allSubscriptions,
+          dobForInput,
+          ...userData
+        };
       });
-    } catch (err) {
-      console.error('Error fetching member details:', err);
-    } finally {
-      setModalLoading(false);
+
+      let enrichedUsers = (await Promise.all(enrichedUsersPromises)).filter(Boolean);
+
+      enrichedUsers.sort((a, b) => {
+        const numA = parseInt(a.regNumber.replace('SPC', '')) || 0;
+        const numB = parseInt(b.regNumber.replace('SPC', '')) || 0;
+        return numA - numB;
+      });
+
+      setUsers(enrichedUsers);
+    } catch (error) {
+      console.error('Error loading users:', error);
+      setAlert({ show: true, type: 'error', message: 'Failed to load user data.' });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!authLoading && staffUser) {
+        const loadInitialData = async () => {
+            setDataLoading(true);
+            try {
+                const loadedFacilitiesMap = await loadFacilities();
+                await loadUsers(loadedFacilitiesMap);
+            } catch (error) {
+                console.error('Error during initial data load:', error);
+            } finally {
+                setDataLoading(false);
+            }
+        };
+        loadInitialData();
+    }
+  }, [authLoading, staffUser, loadFacilities, loadUsers]);
+
+  // QR CODE FUNCTIONS
+  const loadQRCodes = async () => {
+    try {
+      const qrSnap = await getDocs(collection(db, 'qrCodes'));
+      const codes = qrSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setQrCodes(codes);
+    } catch (error) {
+      console.error("Error loading QR codes:", error);
+      setAlert({ show: true, type: 'error', message: 'Failed to load QR codes' });
     }
   };
 
-  // Handle view member
-  const handleViewMember = (member) => {
-    setSelectedMember(member);
-    fetchMemberDetails(member);
+  const handleQRFileChange = (e) => {
+    if (e.target.files[0]) {
+      setQrFile(e.target.files[0]);
+    }
   };
 
-  // Handle delete member
-  const handleDelete = async (memberId, memberName) => {
-    if (!confirm(`Are you sure you want to delete "${memberName}"? This action cannot be undone.`)) {
+  const handleUploadQR = async () => {
+    if (!qrName.trim() || !qrFile) {
+      setAlert({ show: true, type: 'error', message: 'Please provide both a name and an image file.' });
       return;
     }
-
+    const isDuplicate = qrCodes.some(qr => qr.name.toLowerCase() === qrName.trim().toLowerCase());
+    if (isDuplicate) {
+      setAlert({ show: true, type: 'error', message: 'A QR code with this name already exists.' });
+      return;
+    }
+    setQrUploading(true);
     try {
-      await deleteDoc(doc(db, 'users', memberId));
-      setMembers(prev => prev.filter(m => m.id !== memberId));
-      alert('Member deleted successfully!');
-    } catch (err) {
-      console.error('Error deleting member:', err);
-      alert('Failed to delete member. Please try again.');
+      const storageRef = ref(storage, `qrCodes/${Date.now()}_${qrFile.name}`);
+      const snapshot = await uploadBytes(storageRef, qrFile);
+      const downloadURL = await getDownloadURL(snapshot.ref);
+      await addDoc(collection(db, 'qrCodes'), {
+        name: qrName.trim(),
+        imageLink: downloadURL,
+        storagePath: snapshot.metadata.fullPath,
+        createdAt: Timestamp.now()
+      });
+      setAlert({ show: true, type: 'success', message: 'QR Code uploaded successfully!' });
+      setQrName('');
+      setQrFile(null);
+      await loadQRCodes();
+    } catch (error) {
+      console.error("Error uploading QR:", error);
+      setAlert({ show: true, type: 'error', message: 'Failed to upload QR code.' });
+    } finally {
+      setQrUploading(false);
     }
   };
 
-  // Filter members
-  const filteredMembers = members.filter(member => {
-    const matchesSearch = 
-      member.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      member.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      member.mobile?.includes(searchTerm) ||
-      member.aadharNo?.includes(searchTerm);
-    
-    const matchesGender = filterGender === 'all' || member.gender?.toLowerCase() === filterGender.toLowerCase();
-    
-    return matchesSearch && matchesGender;
+  const handleDeleteQR = async (id, imageLink, storagePath) => {
+    if (!window.confirm("Are you sure you want to delete this QR code?")) return;
+    try {
+      await deleteDoc(doc(db, 'qrCodes', id));
+      if (storagePath) {
+        const fileRef = ref(storage, storagePath);
+        await deleteObject(fileRef).catch(err => console.warn("Storage file not found or already deleted", err));
+      } else if (imageLink) {
+         const fileRef = ref(storage, imageLink);
+         await deleteObject(fileRef).catch(err => console.warn("Could not delete file from storage ref", err));
+      }
+      setAlert({ show: true, type: 'success', message: 'QR Code deleted.' });
+      await loadQRCodes();
+    } catch (error) {
+      console.error("Error deleting QR:", error);
+      setAlert({ show: true, type: 'error', message: 'Failed to delete QR code.' });
+    }
+  };
+
+  const loadUserSubscriptionsAndPayments = async (userId) => {
+    const subscriptionsRef = collection(db, 'users', userId, 'subscriptions');
+    const subscriptionsSnap = await getDocs(query(subscriptionsRef, orderBy('createdAt', 'desc')));
+    const subscriptionsData = subscriptionsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    setSelectedUserSubscriptions(subscriptionsData);
+    const paymentsQuery = query(collection(db, 'payments'), where('userId', '==', userId), orderBy('paymentDate', 'desc'));
+    const paymentsSnap = await getDocs(paymentsQuery);
+    const paymentsData = paymentsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    setSelectedUserPayments(paymentsData);
+  };
+
+  const handleInputChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
+  };
+
+  const validateForm = () => {
+    const required = ['name', 'mobile', 'dob', 'address', 'aadharNo'];
+    for (let field of required) {
+      if (!formData[field]) {
+        setAlert({ show: true, type: 'error', message: `Please fill in ${field}` });
+        return false;
+      }
+    }
+    if (formData.mobile.length !== 10) {
+      setAlert({ show: true, type: 'error', message: 'Mobile must be 10 digits' });
+      return false;
+    }
+    if (formData.aadharNo.length !== 12) {
+      setAlert({ show: true, type: 'error', message: 'Aadhar must be 12 digits' });
+      return false;
+    }
+    if (formData.planType === 'registrationOnly') {
+      return true;
+    }
+    return true;
+  };
+
+  const handleRegisterNewUser = async () => {
+    if (!validateForm()) return;
+    const duplicate = users.find(u => 
+      u.mobile === formData.mobile || u.aadharNo === formData.aadharNo
+    );
+    if (duplicate) {
+      setDuplicateWarning({ show: true, user: duplicate });
+      return; 
+    }
+    setLoading(true);
+    setIsGeneratingReceipt(true); 
+    try {
+      const now = new Date();
+      const registrationDate = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+      const dobParts = formData.dob.split('-');
+      const formattedDob = `${dobParts[2]}/${dobParts[1]}/${dobParts[0]}`;
+      const infoRef = doc(db, 'users', '000info');
+      const paymentInfoRef = doc(db, 'payments', '000info');
+      let nextRegNum = 1;
+      let nextInvoiceNo = 1;
+      await runTransaction(db, async (transaction) => {
+        const infoDoc = await transaction.get(infoRef);
+        const paymentInfoDoc = await transaction.get(paymentInfoRef);
+        let currentLast = 0;
+        if (infoDoc.exists()) {
+          currentLast = infoDoc.data().regNumLast || 0;
+        } else {
+          transaction.set(infoRef, { regNumLast: 0 });
+        }
+        nextRegNum = currentLast + 1;
+        transaction.update(infoRef, { regNumLast: nextRegNum });
+        let currentInvoiceLast = 0;
+        if (paymentInfoDoc.exists()) {
+          currentInvoiceLast = paymentInfoDoc.data().lastInvoice || 0;
+        } else {
+          transaction.set(paymentInfoRef, { lastInvoice: 0 });
+        }
+        const nextInvoiceNum = currentInvoiceLast + 1;
+        const currentYear = new Date().getFullYear();
+        const paddedNum = String(nextInvoiceNum).padStart(5, '0');
+        nextInvoiceNo = `INV${currentYear}${paddedNum}`;
+        transaction.update(paymentInfoRef, { lastInvoice: nextInvoiceNum });
+      });
+      const newRegNumber = `SPC${String(nextRegNum).padStart(4, '0')}`;
+      const userData = {
+        name: formData.name, 
+        email: formData.email || '', 
+        mobile: formData.mobile, 
+        dob: formattedDob,
+        gender: formData.gender, 
+        fatherName: formData.fatherName || '', 
+        address: formData.address,
+        aadharNo: formData.aadharNo, 
+        registrationDate: registrationDate,
+        regNumber: newRegNumber,
+      };
+      const userRef = await addDoc(collection(db, 'users'), userData);
+      setAlert({ show: true, type: 'success', message: `User registered successfully! ID: ${newRegNumber}.` });
+      closeRegistrationModal();
+      setLoading(false); 
+      setIsGeneratingReceipt(false);
+      await loadUsers(facilitiesMap);
+    } catch (error) {
+      console.error('Error registering user:', error);
+      setAlert({ show: true, type: 'error', message: `Registration failed: ${error.message}` });
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateUser = async () => {
+    if (!validateForm()) return;
+    setLoading(true);
+    try {
+      if (!selectedUser) throw new Error("No user selected");
+      const dobParts = formData.dob.split('-');
+      const formattedDob = `${dobParts[2]}/${dobParts[1]}/${dobParts[0]}`;
+      const userDocRef = doc(db, 'users', selectedUser.id);
+      await updateDoc(userDocRef, {
+        name: formData.name, email: formData.email || '', mobile: formData.mobile, dob: formattedDob,
+        gender: formData.gender, fatherName: formData.fatherName || '', address: formData.address,
+        aadharNo: formData.aadharNo, lastUpdatedAt: Timestamp.now()
+      });
+      setAlert({ show: true, type: 'success', message: 'User updated successfully!' });
+      closeEditModal();
+      await loadUsers(facilitiesMap);
+    } catch (error) {
+      console.error('Error updating user:', error);
+      setAlert({ show: true, type: 'error', message: `Update failed: ${error.message}` });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openRegistrationModal = () => {
+    setFormData({ ...initialFormData, facilityId: '' });
+    loadQRCodes(); 
+    setShowRegistrationModal(true);
+  };
+  
+  const closeRegistrationModal = () => {
+    setShowRegistrationModal(false);
+    setFormData(initialFormData);
+  };
+  
+  const openEditModal = async (userToEdit) => {
+    setSelectedUser(userToEdit);
+    setFormData({
+      name: userToEdit.name, email: userToEdit.email, mobile: userToEdit.mobile, dob: userToEdit.dobForInput,
+      gender: userToEdit.gender, fatherName: userToEdit.fatherName, address: userToEdit.address,
+      aadharNo: userToEdit.aadharNo, facilityId: '', planType: 'oneMonth',
+      startDate: new Date().toISOString().split('T')[0],
+    });
+    await loadUserSubscriptionsAndPayments(userToEdit.id);
+    setShowEditModal(true);
+  };
+  
+  const closeEditModal = () => {
+    setShowEditModal(false);
+    setSelectedUser(null);
+    setSelectedUserSubscriptions([]);
+    setSelectedUserPayments([]);
+    setFormData(initialFormData);
+  };
+  
+  const openExtensionModal = (facilityId = '') => {
+    setSelectedFacilityForExtension(facilityId);
+    setShowExtensionModal(true);
+  };
+  
+  const closeExtensionModal = () => {
+    setShowExtensionModal(false);
+    setSelectedFacilityForExtension('');
+  };
+  
+  const handleSubscriptionExtended = async (receiptInfo) => {
+    closeExtensionModal();
+    if (receiptInfo) {
+      setReceiptData(receiptInfo);
+      setShowReceiptModal(true);
+    }
+    await loadUsers(facilitiesMap);
+    if (selectedUser) await loadUserSubscriptionsAndPayments(selectedUser.id);
+  };
+
+  const selectedFacility = facilities.find(f => f.id === formData.facilityId);
+  const calculatedFee = !showEditModal && selectedFacility && selectedFacility.fees ? (() => {
+    const feeData = selectedFacility.fees[formData.planType];
+    if (!feeData) return 0;
+    let baseFee = formData.gender === 'Male' ? feeData.price : feeData.priceFemale;
+    if (formData.isRegistration && formData.planType !== 'withoutReg' && selectedFacility.fees['registration']) {
+      const regFee = formData.gender === 'Male' ? selectedFacility.fees['registration'].price : selectedFacility.fees['registration'].price;
+      baseFee += regFee;
+    }
+    return baseFee;
+  })() : 0;
+
+  const filteredUsers = users.filter(userItem => {
+    const searchLower = searchTerm.toLowerCase();
+    const matchesSearchTerm = 
+      (userItem.name || '').toLowerCase().includes(searchLower) ||
+      (userItem.regNumber || '').toLowerCase().includes(searchLower) ||
+      String(userItem.mobile || '').includes(searchTerm) ||
+      String(userItem.aadharNo || '').includes(searchTerm); 
+
+    if (!matchesSearchTerm) return false;
+
+    if (selectedFacilityFilter !== 'all' && selectedFacilityFilter !== '') {
+      const hasSubscriptionForFacility = userItem.subscriptions.some(
+        sub => sub.facilityId === selectedFacilityFilter
+      );
+      if (!hasSubscriptionForFacility) return false;
+    }
+
+    if (filterExpiryStatus === 'active') {
+      if (!userItem.hasActiveSubscriptions) return false;
+    } else if (filterExpiryStatus === 'expired') {
+      if (userItem.hasActiveSubscriptions) return false;
+    }
+
+    if (filterAgeCategory !== 'all') {
+      if (userItem.ageCategory !== filterAgeCategory) return false;
+    }
+
+    if (filterGender !== 'all') {
+      if (userItem.gender !== filterGender) return false;
+    }
+
+    return true;
   });
 
-  // Statistics
-  const totalMembers = members.length;
-  const maleMembers = members.filter(m => m.gender?.toLowerCase() === 'male').length;
-  const femaleMembers = members.filter(m => m.gender?.toLowerCase() === 'female').length;
-
-  // Parse Firestore date string format
-  const parseFirestoreDate = (dateValue) => {
-    if (!dateValue) return null;
-    
+  // --- EXPORT FUNCTIONS START ---
+  const exportToExcel = () => {
+    if (filteredUsers.length === 0) {
+      setAlert({ show: true, type: 'error', message: 'No data to export' });
+      return;
+    }
+    setExportLoading(true);
     try {
-      // Check if it's a Firestore Timestamp object
-      if (dateValue.toDate && typeof dateValue.toDate === 'function') {
-        return dateValue.toDate();
-      }
-      // Check if it's already a Date object
-      else if (dateValue instanceof Date) {
-        return dateValue;
-      }
-      // Check if it's a string in Firestore format like "8 November 2025 at 16:00:10 UTC+5:30"
-      else if (typeof dateValue === 'string') {
-        if (dateValue.includes(' at ')) {
-          const datePart = dateValue.split(' at ')[0];
-          return new Date(datePart);
-        } else {
-          return new Date(dateValue);
-        }
-      }
-      // If it's a number (timestamp in milliseconds)
-      else if (typeof dateValue === 'number') {
-        return new Date(dateValue);
-      }
+      const exportData = filteredUsers.map(u => ({
+        'Reg Number': u.regNumber,
+        'Name': u.name,
+        'Mobile': u.mobile,
+        'Age Category': u.ageCategory,
+        'Gender': u.gender,
+        'Registration Expiry': u.registrationExpiry,
+        'Facilities & Expiry': u.subscriptions.map(s => `${s.facilityName} (${s.endDateStr})`).join(', ')
+      }));
+
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(exportData);
       
-      return null;
+      // Auto-size columns slightly
+      ws['!cols'] = [
+        { wch: 15 }, // Reg Number
+        { wch: 25 }, // Name
+        { wch: 15 }, // Mobile
+        { wch: 15 }, // Age
+        { wch: 10 }, // Gender
+        { wch: 20 }, // Reg Expiry
+        { wch: 40 }  // Facilities
+      ];
+
+      XLSX.utils.book_append_sheet(wb, ws, 'Users');
+      XLSX.writeFile(wb, `Users_Export_${new Date().toISOString().slice(0,10)}.xlsx`);
+      setAlert({ show: true, type: 'success', message: 'Excel exported successfully!' });
     } catch (error) {
-      console.error('Error parsing date:', error, dateValue);
-      return null;
+      console.error('Export Error:', error);
+      setAlert({ show: true, type: 'error', message: 'Failed to export Excel' });
+    } finally {
+      setExportLoading(false);
     }
   };
 
-  // Format date - handles Firestore Timestamps, Date objects, and string dates
-  const formatDate = (dateValue) => {
-    if (!dateValue) return 'N/A';
-    
-    try {
-      const date = parseFirestoreDate(dateValue);
-      
-      // Check if date is valid
-      if (date && !isNaN(date.getTime())) {
-        return date.toLocaleDateString('en-IN', { 
-          day: '2-digit', 
-          month: 'short', 
-          year: 'numeric' 
-        });
-      }
-      
-      // If all parsing fails, return the original value as string
-      return String(dateValue);
-    } catch (error) {
-      console.error('Error formatting date:', error, dateValue);
-      return 'Invalid Date';
+  const exportToPDF = () => {
+    if (filteredUsers.length === 0) {
+      setAlert({ show: true, type: 'error', message: 'No data to export' });
+      return;
     }
-  };
+    setExportLoading(true);
+    
+    const printWindow = window.open('', '_blank');
+    const tableRows = filteredUsers.map((u, i) => `
+      <tr class="${i % 2 === 0 ? 'even' : 'odd'}">
+        <td>${u.regNumber}</td>
+        <td>${u.name}</td>
+        <td>${u.mobile}</td>
+        <td>${u.ageCategory}</td>
+        <td>${u.registrationExpiry}</td>
+        <td>
+           ${u.subscriptions.map(s => `<div>${s.facilityName} <span style="color:#666; font-size:9px;">(${s.endDateStr})</span></div>`).join('')}
+        </td>
+      </tr>
+    `).join('');
 
-  // Get registration status based on expiry date
-  const getRegistrationStatus = (registration) => {
-    if (!registration || !registration.expDate) return 'unknown';
-    
-    try {
-      const expDate = parseFirestoreDate(registration.expDate);
-      
-      if (!expDate || isNaN(expDate.getTime())) {
-        return 'unknown';
-      }
-      
-      // Compare with today's date
-      const today = new Date();
-      today.setHours(0, 0, 0, 0); // Reset time to start of day
-      expDate.setHours(0, 0, 0, 0); // Reset time to start of day
-      
-      return expDate >= today ? 'active' : 'expired';
-    } catch (error) {
-      console.error('Error determining registration status:', error);
-      return 'unknown';
-    }
-  };
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>User Report</title>
+        <style>
+          @page { size: A4 landscape; margin: 10mm; }
+          body { font-family: 'Helvetica', 'Arial', sans-serif; font-size: 11px; }
+          h1 { text-align: center; color: #1e40af; margin-bottom: 5px; }
+          .meta { text-align: center; font-size: 10px; color: #666; margin-bottom: 20px; }
+          table { width: 100%; border-collapse: collapse; }
+          th { background-color: #2563eb; color: white; padding: 8px; text-align: left; font-size: 10px; }
+          td { border-bottom: 1px solid #e2e8f0; padding: 6px 8px; vertical-align: top; }
+          tr.even { background-color: #f8fafc; }
+        </style>
+      </head>
+      <body>
+        <h1>Raigarh Stadium Samiti - User Report</h1>
+        <div class="meta">Generated: ${new Date().toLocaleString('en-GB')} | Total Records: ${filteredUsers.length}</div>
+        <table>
+          <thead>
+            <tr>
+              <th>Reg No</th>
+              <th>Name</th>
+              <th>Mobile</th>
+              <th>Category</th>
+              <th>Reg Expiry</th>
+              <th>Facilities (Expiry)</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tableRows}
+          </tbody>
+        </table>
+        <script>
+           window.onload = function() { window.print(); }
+        </script>
+      </body>
+      </html>
+    `;
 
-  // Get subscription status based on end date
-  const getSubscriptionStatus = (subscription) => {
-    if (!subscription.endDate) return 'unknown';
-    
-    try {
-      const endDate = parseFirestoreDate(subscription.endDate);
-      
-      if (!endDate || isNaN(endDate.getTime())) {
-        return 'unknown';
-      }
-      
-      // Compare with today's date
-      const today = new Date();
-      today.setHours(0, 0, 0, 0); // Reset time to start of day
-      endDate.setHours(0, 0, 0, 0); // Reset time to start of day
-      
-      return endDate >= today ? 'active' : 'expired';
-    } catch (error) {
-      console.error('Error determining subscription status:', error);
-      return 'unknown';
-    }
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+    setExportLoading(false);
   };
+  // --- EXPORT FUNCTIONS END ---
 
-  // Get facility name from facilityId (handles both string paths and Firestore references)
-  const getFacilityName = (facilityId) => {
-    if (!facilityId) return 'N/A';
-    
-    // Check if it's a Firestore reference object
-    if (facilityId.path) {
-      const parts = facilityId.path.split('/');
-      return parts[parts.length - 1] || 'N/A';
-    }
-    
-    // If it's already a string path
-    if (typeof facilityId === 'string') {
-      const parts = facilityId.split('/');
-      return parts[parts.length - 1] || 'N/A';
-    }
-    
-    return 'N/A';
-  };
-
-  if (loading) {
+  if (authLoading || dataLoading) {
     return (
-      <div className="p-6 flex items-center justify-center min-h-screen">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading members...</p>
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
+    <div className="min-h-screen bg-gray-50 p-6">
+      {alert.show && (
+        <div className={`fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg ${alert.type === 'success' ? 'bg-green-500' : 'bg-red-500'} text-white`}>
+          {alert.type === 'success' ? <CheckCircle size={20} /> : <AlertCircle size={20} />}
+          <span>{alert.message}</span>
+          <button onClick={() => setAlert({ show: false, type: '', message: '' })}><X size={18} /></button>
+        </div>
+      )}
+
+      {/* GENERATING RECEIPT OVERLAY */}
+      {isGeneratingReceipt && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[80]">
+          <div className="bg-white p-6 rounded-lg shadow-xl flex flex-col items-center animate-in fade-in zoom-in-95 duration-200">
+            <Loader2 className="animate-spin text-blue-600 mb-3" size={32} />
+            <p className="text-gray-900 font-semibold text-lg">Generating Receipt...</p>
+            <p className="text-gray-500 text-sm mt-1">Please wait a moment</p>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-800">Members Management</h1>
-        <p className="text-gray-600 mt-1">View and manage registered members</p>
-      </div>
-
-      {/* Error Message */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
-          {error}
-        </div>
-      )}
-
-      {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="bg-white p-6 rounded-lg shadow-md border-l-4 border-blue-500">
-          <h3 className="text-gray-600 text-sm font-medium">Total Members</h3>
-          <p className="text-3xl font-bold text-gray-800 mt-2">{totalMembers}</p>
-        </div>
-        <div className="bg-white p-6 rounded-lg shadow-md border-l-4 border-indigo-500">
-          <h3 className="text-gray-600 text-sm font-medium">Active Members</h3>
-          <p className="text-3xl font-bold text-gray-800 mt-2">N/A</p>
-        </div>
-        <div className="bg-white p-6 rounded-lg shadow-md border-l-4 border-pink-500">
-          <h3 className="text-gray-600 text-sm font-medium">Registered Members</h3>
-          <p className="text-3xl font-bold text-gray-800 mt-2">N/A</p>
+      <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Users & Registrations</h1>
+          <p className="text-gray-600">Manage user registrations and memberships</p>
         </div>
       </div>
 
-      {/* Search and Filter */}
-      <div className="bg-white p-4 rounded-lg shadow-md mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
-            <input
-              type="text"
-              placeholder="Search by name, email, mobile or Aadhar..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
+    
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+          <div className="flex items-center justify-between">
+   
+            <div><p className="text-sm text-gray-600">Total Users</p><p className="text-2xl font-bold text-gray-900">{filteredUsers.length}</p></div>
+            <Users className="text-blue-500" size={32} />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Gender</label>
-            <select
-              value={filterGender}
-              onChange={(e) => setFilterGender(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="all">All Genders</option>
-              <option value="male">Male</option>
-              <option value="female">Female</option>
-            </select>
+        </div>
+        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+          <div className="flex items-center justify-between">
+            
+            <div><p className="text-sm text-gray-600">Active Subscriptions</p><p className="text-2xl font-bold text-green-600">{filteredUsers.filter(u => u.hasActiveSubscriptions).length}</p></div>
+            <CheckCircle className="text-green-500" size={32} />
+          </div>
+        </div>
+        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+          <div className="flex items-center justify-between">
+          
+            <div><p className="text-sm text-gray-600">No Active Subscription</p><p className="text-2xl font-bold text-red-600">{filteredUsers.filter(u => !u.hasActiveSubscriptions).length}</p></div>
+            <AlertCircle className="text-red-500" size={32} />
           </div>
         </div>
       </div>
+      {/* Search & Register Button */}
+      <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-6">
+  <div className="flex flex-wrap gap-4 items-center justify-between">
+    <input
+      type="text"
+      placeholder="Search by name, reg#, mobile, or aadhar..." 
+      value={searchTerm}
+      onChange={(e) => setSearchTerm(e.target.value)}
+      className="flex-1 min-w-64 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+    />
 
-      {/* Members List */}
-      {filteredMembers.length === 0 ? (
-        <div className="bg-white rounded-lg shadow-md p-12 text-center">
-          <div className="text-gray-400 mb-4">
-            <FiUser className="w-16 h-16 mx-auto" />
-          </div>
-          <h3 className="text-xl font-semibold text-gray-800 mb-2">
-            {members.length === 0 ? 'No Members Yet' : 'No Results Found'}
-          </h3>
-          <p className="text-gray-600">
-            {members.length === 0 
-              ? 'No members have registered yet'
-              : 'Try adjusting your search or filter criteria'
-            }
-          </p>
+    {/* Facility Filter */}
+    <select
+      value={selectedFacilityFilter}
+      onChange={(e) => setSelectedFacilityFilter(e.target.value)}
+      className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+    >
+      <option value="all">All Facilities</option>
+      {facilities.map(f => (
+        <option key={f.id} value={f.id}>{f.name}</option>
+      ))}
+    </select>
+
+    {/* Expiry Status Filter */}
+    <select
+      value={filterExpiryStatus}
+      onChange={(e) => setFilterExpiryStatus(e.target.value)}
+      className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+    >
+      <option value="all">All Subscriptions</option>
+      <option value="active">Active Subscriptions</option>
+      <option value="expired">Expired Subscriptions</option>
+    </select>
+
+    {/* Age Category Filter */}
+    <select
+      value={filterAgeCategory}
+      onChange={(e) => setFilterAgeCategory(e.target.value)}
+      className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+    >
+      <option value="all">All Age Categories</option>
+      <option value="Child">Child</option>
+      <option value="Adult">Adult</option>
+      <option value="Senior">Senior</option>
+    </select>
+
+    {/* Gender Filter */}
+    <select
+      value={filterGender}
+      onChange={(e) => setFilterGender(e.target.value)}
+      className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+    >
+      <option value="all">All Genders</option>
+      <option value="Male">Male</option>
+      <option value="Female">Female</option>
+    </select>
+
+    {/* EXPORT BUTTONS */}
+    <div className="flex gap-2">
+      <button 
+        onClick={exportToPDF} 
+        disabled={exportLoading}
+        className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors flex items-center gap-1"
+        title="Export PDF"
+      >
+        <FileDown size={18} />
+      </button>
+      <button 
+        onClick={exportToExcel}
+        disabled={exportLoading} 
+        className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors flex items-center gap-1"
+        title="Export Excel"
+      >
+        <Download size={18} />
+      </button>
+    </div>
+
+    <button onClick={openRegistrationModal} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2">
+      <User size={18} />Register New User
+    </button>
+  
         </div>
-      ) : (
-        <div className="bg-white rounded-lg shadow-md overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Member
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Contact
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Registration
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Subscriptions
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
+      </div>
+
+      {/* Users Table */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reg Number</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Age Category</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Registration Expiry</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Facilities</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Expiry Date</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {filteredUsers.length === 0 ? (
+                <tr><td colSpan="7" className="px-6 py-8 text-center text-gray-500">No users found</td></tr>
+              ) : (
+                filteredUsers.map(userItem => (
+                  <tr key={userItem.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 text-sm font-medium text-gray-900">{userItem.regNumber}</td>
+                    <td className="px-6 py-4 text-sm text-gray-900">{userItem.name}</td>
+                    <td className="px-6 py-4 text-sm text-gray-600">{userItem.ageCategory}</td>
+                    <td className="px-6 py-4 text-sm">
+                      <span className={`${userItem.registrationExpiry === 'Expired' ? 'text-red-600 font-semibold' : 'text-gray-900'}`}>
+                        {userItem.registrationExpiry}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-sm">
+                      {userItem.subscriptions.length > 0 ? (
+                        <div className="space-y-1">
+                          {userItem.subscriptions.map((sub, idx) => (
+                            <div key={idx} className={`${sub.isActive ? 'text-green-600 font-medium' : 'text-gray-500'}`}>
+                              {sub.facilityName}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-gray-400 italic">No active plan</span>
+                      )}
+                    </td>
+                  <td className="px-6 py-4 text-sm">
+                    <div className="space-y-1">
+                      {userItem.subscriptions.length > 0 ? (
+                        userItem.subscriptions.map((sub, idx) => (
+                          <div key={idx} className={`${sub.isActive ? 'text-green-600 font-medium' : 'text-gray-500'}`}>
+                            {sub.endDateStr}
+                          </div>
+                        ))
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-sm font-medium">
+                    <div className="flex items-center gap-2">
+                      <button 
+                        onClick={() => openEditModal(userItem)}
+                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                        title="Edit User"
+                      >
+                        <Edit size={18} />
+                      </button>
+                      <button 
+                        onClick={() => {
+                          setSelectedUser(userItem);
+                          openExtensionModal();
+                        }}
+                        className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                        title="Renew/Extend Subscription"
+                      >
+                        <RefreshCcw size={18} />
+                      </button>
+                       <button 
+                        onClick={() => handleDeleteUser(userItem.id)}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Delete User"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredMembers.map((member) => {
-                  const regStatus = getRegistrationStatus(member.registration);
-                  return (
-                    <tr key={member.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="flex-shrink-0 h-10 w-10 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center">
-                            <span className="text-white font-semibold text-sm">
-                              {member.name?.charAt(0)?.toUpperCase() || 'M'}
-                            </span>
-                          </div>
-                          <div className="ml-4">
-                            <div className="text-sm font-medium text-gray-900">
-                              {member.name || 'N/A'}
-                            </div>
-                            <div className="text-sm text-gray-500">
-                              {member.fatherName || 'N/A'}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
-                          <div className="flex items-center mb-1">
-                            <FiMail className="w-3 h-3 mr-2 text-gray-400" />
-                            <span className="truncate max-w-xs">{member.email || 'N/A'}</span>
-                          </div>
-                          <div className="flex items-center">
-                            <FiPhone className="w-3 h-3 mr-2 text-gray-400" />
-                            {member.mobile || 'N/A'}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
-                          {member.registration ? (
-                            <div>
-                              <div className="flex items-center mb-1">
-                                {regStatus === 'active' ? (
-                                  <FiCheckCircle className="w-4 h-4 mr-1 text-green-500" />
-                                ) : (
-                                  <FiXCircle className="w-4 h-4 mr-1 text-red-500" />
-                                )}
-                                <span className={`text-xs font-semibold ${
-                                  regStatus === 'active' ? 'text-green-700' : 'text-red-700'
-                                }`}>
-                                  {regStatus === 'active' ? 'Active' : 'Expired'}
-                                </span>
-                              </div>
-                              <div className="flex items-center text-xs text-gray-500">
-                                <FiCalendar className="w-3 h-3 mr-1" />
-                                {formatDate(member.registration.regDate)}
-                              </div>
-                            </div>
-                          ) : (
-                            <span className="text-gray-400 text-xs">No registration</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm text-gray-900">
-                          {member.subscriptions && member.subscriptions.length > 0 ? (
-                            <div className="flex flex-wrap gap-1">
-                              {member.subscriptions.map((sub, idx) => {
-                                const status = getSubscriptionStatus(sub);
-                                return (
-                                  <span
-                                    key={idx}
-                                    className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                                      status === 'active'
-                                        ? 'bg-green-100 text-green-800'
-                                        : status === 'expired'
-                                        ? 'bg-red-100 text-red-800'
-                                        : 'bg-gray-100 text-gray-800'
-                                    }`}
-                                  >
-                                    {getFacilityName(sub.facilityId)}
-                                  </span>
-                                );
-                              })}
-                            </div>
-                          ) : (
-                            <span className="text-gray-400 text-xs">No subscriptions</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleViewMember(member)}
-                            className="text-blue-600 hover:text-blue-900 p-2 hover:bg-blue-50 rounded"
-                            title="View Details"
-                          >
-                            <FiEye className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(member.id, member.name)}
-                            className="text-red-600 hover:text-red-900 p-2 hover:bg-red-50 rounded"
-                            title="Delete Member"
-                          >
-                            <FiTrash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+              )))}
+            </tbody>
+          </table>
         </div>
-      )}
+      </div>
 
-      {/* Results Count */}
-      {filteredMembers.length > 0 && (
-        <div className="mt-4 text-sm text-gray-600 text-center">
-          Showing {filteredMembers.length} of {members.length} members
-        </div>
-      )}
+      {/* REGISTRATION MODAL */}
+      <UserFormModal
+        isOpen={showRegistrationModal}
+        onClose={closeRegistrationModal}
+        formData={formData}
+        handleInputChange={handleInputChange}
+        handleSubmit={handleRegisterNewUser}
+        loading={loading}
+        facilities={facilities}
+        selectedFacility={selectedFacility}
+        calculatedFee={calculatedFee}
+        isEditMode={false}
+        qrCodes={qrCodes} 
+      />
 
-      {/* Member Details Modal */}
-      {selectedMember && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            {/* Modal Header */}
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
-              <h2 className="text-2xl font-bold text-gray-800">Member Details</h2>
-              <button
-                onClick={() => {
-                  setSelectedMember(null);
-                  setMemberDetails(null);
-                }}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <FiX className="w-6 h-6" />
-              </button>
+      {/* EDIT USER MODAL */}
+      <UserFormModal
+        isOpen={showEditModal}
+        onClose={closeEditModal}
+        formData={formData}
+        handleInputChange={handleInputChange}
+        handleSubmit={handleUpdateUser}
+        loading={loading}
+        facilities={facilities}
+        isEditMode={true}
+        selectedUser={selectedUser}
+        userSubscriptions={selectedUserSubscriptions}
+        userPayments={selectedUserPayments}
+        onExtendSubscriptionClick={() => {
+            closeEditModal();
+            openExtensionModal();
+        }}
+        qrCodes={qrCodes} 
+      />
+
+      {/* SUBSCRIPTION EXTENSION MODAL */}
+      <SubscriptionExtensionModal
+        isOpen={showExtensionModal}
+        onClose={closeExtensionModal}
+        user={selectedUser}
+        staffData={staffUser}
+        facilities={facilities}
+        onSubscriptionExtended={handleSubscriptionExtended}
+        selectedFacilityId={selectedFacilityForExtension}
+        setAlert={setAlert}
+      />
+
+      {/* DUPLICATE USER WARNING MODAL */}
+      {duplicateWarning.show && duplicateWarning.user && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex flex-col items-center text-center">
+              <div className="bg-orange-100 p-3 rounded-full mb-4">
+                <AlertTriangle className="text-orange-600 w-10 h-10" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">User Already Exists</h3>
+              <p className="text-gray-600 mb-6">
+                A user with this mobile number or Aadhar already exists in the system.
+              </p>
+              
+              <div className="bg-gray-50 rounded-lg p-4 w-full mb-6 border border-gray-200 text-left">
+                <p className="text-sm text-gray-500 mb-1">Existing User Details:</p>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <span className="font-semibold text-gray-700">Name:</span>
+                  <span>{duplicateWarning.user.name}</span>
+                  <span className="font-semibold text-gray-700">Reg Number:</span>
+                  <span className="font-mono bg-gray-200 px-1 rounded">{duplicateWarning.user.regNumber}</span>
+                  <span className="font-semibold text-gray-700">Mobile:</span>
+                  <span>{duplicateWarning.user.mobile}</span>
+                  <span className="font-semibold text-gray-700">Aadhar:</span>
+                  <span>{duplicateWarning.user.aadharNo}</span>
+                </div>
+              </div>
+
+              <div className="flex flex-col w-full gap-3">
+                <button 
+                  onClick={() => setDuplicateWarning({ show: false, user: null })}
+                  className="w-full py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
+                >
+                  Edit New User Details & Proceed
+                </button>
+                <button 
+                  onClick={() => {
+                    setDuplicateWarning({ show: false, user: null });
+                    closeRegistrationModal();
+                  }} 
+                  className="w-full py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors"
+                >
+                  Cancel Registration
+                </button>
+              </div>
             </div>
-
-            {/* Modal Content */}
-            {modalLoading ? (
-              <div className="p-12 text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-                <p className="mt-4 text-gray-600">Loading details...</p>
-              </div>
-            ) : memberDetails ? (
-              <div className="p-6">
-                {/* Personal Information */}
-                <div className="mb-6">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-4">Personal Information</h3>
-                  <div className="bg-gray-50 rounded-lg p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-xs font-medium text-gray-500">Full Name</label>
-                      <p className="text-sm text-gray-900">{memberDetails.name || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium text-gray-500">Father's Name</label>
-                      <p className="text-sm text-gray-900">{memberDetails.fatherName || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium text-gray-500">Gender</label>
-                      <p className="text-sm text-gray-900">{memberDetails.gender || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium text-gray-500">Date of Birth</label>
-                      <p className="text-sm text-gray-900">{memberDetails.dob || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium text-gray-500">Aadhar Number</label>
-                      <p className="text-sm text-gray-900 font-mono">{memberDetails.aadharNo || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium text-gray-500">Mobile</label>
-                      <p className="text-sm text-gray-900">{memberDetails.mobile || 'N/A'}</p>
-                    </div>
-                    <div className="md:col-span-2">
-                      <label className="text-xs font-medium text-gray-500">Email</label>
-                      <p className="text-sm text-gray-900">{memberDetails.email || 'N/A'}</p>
-                    </div>
-                    <div className="md:col-span-2">
-                      <label className="text-xs font-medium text-gray-500 flex items-center">
-                        <FiMapPin className="w-3 h-3 mr-1" /> Address
-                      </label>
-                      <p className="text-sm text-gray-900">{memberDetails.address || 'N/A'}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Registration Information */}
-                <div className="mb-6">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-4">Registration Status</h3>
-                  {memberDetails.registration ? (
-                    <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="flex items-center gap-2">
-                          {getRegistrationStatus(memberDetails.registration) === 'active' ? (
-                            <FiCheckCircle className="w-5 h-5 text-green-500" />
-                          ) : (
-                            <FiXCircle className="w-5 h-5 text-red-500" />
-                          )}
-                          <span className={`px-3 py-1 text-sm font-semibold rounded-full ${
-                            getRegistrationStatus(memberDetails.registration) === 'active'
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-red-100 text-red-800'
-                          }`}>
-                            {getRegistrationStatus(memberDetails.registration) === 'active' ? 'Active Registration' : 'Expired Registration'}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div>
-                          <span className="text-gray-500">Registration Date:</span>
-                          <p className="text-gray-900 font-medium mt-1">
-                            {formatDate(memberDetails.registration.regDate)}
-                          </p>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">Expiry Date:</span>
-                          <p className="text-gray-900 font-medium mt-1">
-                            {formatDate(memberDetails.registration.expDate)}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="bg-gray-50 rounded-lg p-8 text-center">
-                      <p className="text-gray-500">No registration information available</p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Active Subscriptions */}
-                <div className="mb-6">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-4">Subscriptions</h3>
-                  {memberDetails.subscriptions && memberDetails.subscriptions.length > 0 ? (
-                    <div className="space-y-3">
-                      {memberDetails.subscriptions.map((sub, idx) => {
-                        const status = getSubscriptionStatus(sub);
-                        return (
-                          <div key={idx} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                            <div className="flex items-start justify-between">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-2">
-                                  <h4 className="font-semibold text-gray-900 capitalize">
-                                    {getFacilityName(sub.facilityId)}
-                                  </h4>
-                                  <span
-                                    className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                                      status === 'active'
-                                        ? 'bg-green-100 text-green-800'
-                                        : status === 'expired'
-                                        ? 'bg-red-100 text-red-800'
-                                        : 'bg-gray-100 text-gray-800'
-                                    }`}
-                                  >
-                                    {status}
-                                  </span>
-                                </div>
-                                <div className="grid grid-cols-2 gap-2 text-sm">
-                                  <div>
-                                    <span className="text-gray-500">Plan Type:</span>
-                                    <span className="ml-2 text-gray-900 capitalize">{sub.planType || 'N/A'}</span>
-                                  </div>
-                                  <div>
-                                    <span className="text-gray-500">Start Date:</span>
-                                    <span className="ml-2 text-gray-900">{formatDate(sub.startDate)}</span>
-                                  </div>
-                                  <div>
-                                    <span className="text-gray-500">End Date:</span>
-                                    <span className="ml-2 text-gray-900">{formatDate(sub.endDate)}</span>
-                                  </div>
-                                  <div>
-                                    <span className="text-gray-500">Created:</span>
-                                    <span className="ml-2 text-gray-900">{formatDate(sub.createdAt)}</span>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="bg-gray-50 rounded-lg p-8 text-center">
-                      <p className="text-gray-500">No subscriptions</p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Payment History */}
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-800 mb-4">Payment History</h3>
-                  {memberDetails.paymentHistory && memberDetails.paymentHistory.length > 0 ? (
-                    <div className="space-y-3">
-                      {memberDetails.paymentHistory.map((payment, idx) => (
-                        <div key={idx} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                          <div className="flex items-start justify-between">
-                            <div className="flex items-start gap-3 flex-1">
-                              <FiCreditCard className="w-5 h-5 text-gray-400 mt-1" />
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-2">
-                                  <span className="font-semibold text-gray-900">₹{payment.amount || 0}</span>
-                                  <span
-                                    className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                                      payment.status === 'Success'
-                                        ? 'bg-green-100 text-green-800'
-                                        : payment.status === 'Pending'
-                                        ? 'bg-yellow-100 text-yellow-800'
-                                        : 'bg-red-100 text-red-800'
-                                    }`}
-                                  >
-                                    {payment.status || 'N/A'}
-                                  </span>
-                                </div>
-                                <div className="grid grid-cols-2 gap-2 text-sm">
-                                  <div>
-                                    <span className="text-gray-500">Method:</span>
-                                    <span className="ml-2 text-gray-900">{payment.method || 'N/A'}</span>
-                                  </div>
-                                  <div>
-                                    <span className="text-gray-500">Transaction ID:</span>
-                                    <span className="ml-2 text-gray-900 font-mono text-xs">{payment.transactionId || 'N/A'}</span>
-                                  </div>
-                                  <div>
-                                    <span className="text-gray-500">Facility:</span>
-                                    <span className="ml-2 text-gray-900 capitalize">{getFacilityName(payment.facilityId)}</span>
-                                  </div>
-                                  <div>
-                                    <span className="text-gray-500">Date:</span>
-                                    <span className="ml-2 text-gray-900">{formatDate(payment.paymentDate)}</span>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="bg-gray-50 rounded-lg p-8 text-center">
-                      <FiCreditCard className="w-12 h-12 text-gray-300 mx-auto mb-2" />
-                      <p className="text-gray-500">No payment history</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : null}
           </div>
         </div>
       )}
+
+      {/* PAYMENT RECEIPT MODAL */}
+      <PaymentReceiptModal 
+        isOpen={showReceiptModal}
+        onClose={() => setShowReceiptModal(false)}
+        data={receiptData}
+      />
+
     </div>
   );
-}
+};
+
+export default UserRegistrationPage;

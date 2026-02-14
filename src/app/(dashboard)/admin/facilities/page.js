@@ -15,8 +15,8 @@ const formatFeeDisplay = (fee) => {
     return `A: ₹${fee.priceAdult || 0} / C: ₹${fee.priceChild || 0}`;
   } else if (fee.priceWithTraining !== undefined || fee.priceWithoutTraining !== undefined) {
     return `W Training: ₹${fee.priceWithTraining || 0} / W/o Training: ₹${fee.priceWithoutTraining || 0}`;
-  } else if (fee.priceMale !== undefined || fee.priceFemale !== undefined) {
-    return `M: ₹${fee.priceMale || 0} / F: ₹${fee.priceFemale || 0}`;
+  } else if (fee.price !== undefined || fee.price !== undefined) {
+    return `M: ₹${fee.price || 0} / F: ₹${fee.price || 0}`;
   }
   
   return null;

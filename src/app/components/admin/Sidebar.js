@@ -47,6 +47,12 @@ const navLinks = [
     href: '/admin/payments', 
     icon: FiCalendar,
     description: 'View Payment records'
+  },
+  {
+    name: 'Academy Payments',
+    href: '/admin/academyPayments',
+    icon: FiCalendar,
+    description: 'Manage academy payment records'
   }
 ];
 
