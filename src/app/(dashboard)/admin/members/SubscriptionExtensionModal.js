@@ -10,7 +10,7 @@ const calculateEndDate = (startDate, planType, duration) => {
     if (duration) {
         end.setMonth(end.getMonth() + duration);
     } else {
-        switch(planType) {
+        switch (planType) {
             case 'oneMonth': end.setMonth(end.getMonth() + 1); break;
             case 'threeMonth': end.setMonth(end.getMonth() + 3); break;
             case 'sixMonth': end.setMonth(end.getMonth() + 6); break;
@@ -35,7 +35,7 @@ const SubscriptionExtensionModal = ({
     const [fetchingSub, setFetchingSub] = useState(false);
     const [loading, setLoading] = useState(false);
     const [loadingFees, setLoadingFees] = useState(false);
-    
+
     // QR and UTR State
     const [qrCodes, setQrCodes] = useState([]);
     const [selectedQr, setSelectedQr] = useState(null);
@@ -56,7 +56,7 @@ const SubscriptionExtensionModal = ({
     // ALL facilities available
     const allowedFacilities = useMemo(() => {
         if (!facilities || facilities.length === 0) return [];
-        return facilities; 
+        return facilities;
     }, [facilities]);
 
     // Fetch QR Codes
@@ -154,13 +154,37 @@ const SubscriptionExtensionModal = ({
                     feesData[doc.id] = { ...doc.data(), id: doc.id };
                 });
                 setSelectedFacilityFees(feesData);
-                
+
                 const availablePlans = Object.keys(feesData).filter(key => key !== 'registration');
-                if (availablePlans.length > 0 && !availablePlans.includes(extensionFormData.planType)) {
-                    setExtensionFormData(prev => ({ ...prev, planType: availablePlans[0] }));
-                } else if (availablePlans.length === 0) {
-                    setExtensionFormData(prev => ({ ...prev, planType: '' }));
+
+                let newPlanType = extensionFormData.planType;
+                let newPriceVariant = '';
+
+                if (availablePlans.length > 0) {
+                    if (!availablePlans.includes(newPlanType)) {
+                        newPlanType = availablePlans[0];
+                    }
+                    // Determine a default variant for this plan
+                    const planData = feesData[newPlanType];
+                    if (planData) {
+                        // Default priority: Male -> Female -> Adult -> Child -> etc.
+                        if (planData.priceMale !== undefined) newPriceVariant = 'priceMale';
+                        else if (planData.priceFemale !== undefined) newPriceVariant = 'priceFemale';
+                        else if (planData.priceAdult !== undefined) newPriceVariant = 'priceAdult';
+                        else if (planData.priceChild !== undefined) newPriceVariant = 'priceChild';
+                        else if (planData.priceWithTraining !== undefined) newPriceVariant = 'priceWithTraining';
+                        else if (planData.priceWithoutTraining !== undefined) newPriceVariant = 'priceWithoutTraining';
+                        else newPriceVariant = 'price';
+                    }
+                } else {
+                    newPlanType = '';
                 }
+
+                setExtensionFormData(prev => ({
+                    ...prev,
+                    planType: newPlanType,
+                    priceVariant: newPriceVariant
+                }));
             } catch (error) {
                 console.error('Error loading fees:', error);
                 setAlert({ show: true, type: 'error', message: 'Error loading facility fees.' });
@@ -174,33 +198,52 @@ const SubscriptionExtensionModal = ({
     }, [extensionFormData.facilityId, isOpen, fetchingSub]);
 
     // Calculate fee
+    // Calculate fee
     useEffect(() => {
-        if (!targetUser || !selectedFacilityFees[extensionFormData.planType]) {
+        if (!selectedFacilityFees[extensionFormData.planType]) {
             setCalculatedFee(0);
             return;
         }
+
         const feeData = selectedFacilityFees[extensionFormData.planType];
-        const userGender = targetUser.gender || 'Male'; 
-        let fee = userGender === 'Male' ? feeData.price : feeData.price;
+
+        // Use explicitly selected variant, or fallback to 0
+        let fee = 0;
+        const variant = extensionFormData.priceVariant || 'price'; // default fallback
+        fee = Number(feeData[variant]) || 0;
+
         if (extensionFormData.includeRegistration && extensionFormData.planType !== 'withoutReg' && selectedFacilityFees['registration']) {
-            const regFee = userGender === 'Male' ? selectedFacilityFees['registration'].price : selectedFacilityFees['registration'].price;
+            const regFeeData = selectedFacilityFees['registration'];
+            let regFee = 0;
+
+            // Try to match the registration fee variant to the main fee variant if possible
+            if (regFeeData[variant] !== undefined) {
+                regFee = Number(regFeeData[variant]) || 0;
+            } else if (regFeeData.price !== undefined) {
+                regFee = Number(regFeeData.price) || 0;
+            } else {
+                // Fallback loops
+                if (regFeeData.priceMale !== undefined) regFee = regFeeData.priceMale;
+                else if (regFeeData.priceAdult !== undefined) regFee = regFeeData.priceAdult;
+                else if (regFeeData.priceWithTraining !== undefined) regFee = regFeeData.priceWithTraining;
+            }
             fee += regFee;
         }
         setCalculatedFee(fee);
-    }, [extensionFormData.planType, extensionFormData.includeRegistration, selectedFacilityFees, targetUser?.gender]);
+    }, [extensionFormData.planType, extensionFormData.priceVariant, extensionFormData.includeRegistration, selectedFacilityFees]);
 
     const handleExtensionInputChange = (e) => {
         const { name, value, type, checked } = e.target;
-        
+
         if (name === 'facilityId') {
             setTargetSubscriptionId(null);
             setCurrentSubscriptionData(null);
-            setExtensionFormData(prev => ({ 
-                ...prev, 
+            setExtensionFormData(prev => ({
+                ...prev,
                 [name]: value,
                 startDate: new Date().toISOString().split('T')[0]
             }));
-            
+
             const fetchNewFacilitySub = async () => {
                 if (!value || !targetUser?.id) return;
                 try {
@@ -225,10 +268,19 @@ const SubscriptionExtensionModal = ({
                 }
             };
             fetchNewFacilitySub();
+        } else if (name === 'planType') {
+            // Value is expected to be "planKey|variantKey" or just "planKey" (if legacy/no-variant)
+            // But to simplify rendering logic let's assume we format the value in the option.
+            const [selectedPlan, selectedVariant] = value.split('|');
+            setExtensionFormData(prev => ({
+                ...prev,
+                planType: selectedPlan,
+                priceVariant: selectedVariant || ''
+            }));
         } else {
-            setExtensionFormData(prev => ({ 
-                ...prev, 
-                [name]: type === 'checkbox' ? checked : value 
+            setExtensionFormData(prev => ({
+                ...prev,
+                [name]: type === 'checkbox' ? checked : value
             }));
         }
     };
@@ -238,7 +290,7 @@ const SubscriptionExtensionModal = ({
 
     const processDatabaseUpdate = async (paymentTransactionId) => {
         if (!targetUser?.id) throw new Error("User ID missing");
-        
+
         // 1. Calculate Dates
         const feeData = selectedFacilityFees[extensionFormData.planType];
         const duration = feeData?.duration || null;
@@ -248,7 +300,7 @@ const SubscriptionExtensionModal = ({
         // 2. Prepare References
         const paymentInfoRef = doc(db, 'payments', '000info');
         const newPaymentRef = doc(collection(db, 'payments')); // Generate ID for new payment
-        
+
         let subscriptionRef;
         if (targetSubscriptionId) {
             subscriptionRef = doc(db, 'users', targetUser.id, 'subscriptions', targetSubscriptionId);
@@ -279,13 +331,13 @@ const SubscriptionExtensionModal = ({
 
             // D. Prepare Payment Data
             const paymentData = {
-                userId: targetUser.id, 
-                amount: calculatedFee, 
+                userId: targetUser.id,
+                amount: calculatedFee,
                 paymentDate: Timestamp.now(),
-                method: 'Online', 
+                method: 'Online',
                 transactionId: paymentTransactionId,
                 status: 'pending',
-                facilityId: extensionFormData.facilityId, 
+                facilityId: extensionFormData.facilityId,
                 planType: extensionFormData.planType,
                 qrCodeName: selectedQr?.name || 'Unknown',
                 processedBy: currentStaff.uid || 'system',
@@ -297,12 +349,12 @@ const SubscriptionExtensionModal = ({
 
             // E. Prepare Subscription Data
             const subData = {
-                facilityId: extensionFormData.facilityId, 
+                facilityId: extensionFormData.facilityId,
                 planType: extensionFormData.planType,
-                startDate: startDateTimestamp, 
-                endDate: endDateTimestamp, 
+                startDate: startDateTimestamp,
+                endDate: endDateTimestamp,
                 status: 'active',
-                updatedAt: Timestamp.now(), 
+                updatedAt: Timestamp.now(),
                 lastPaymentId: newPaymentRef.id,
             };
 
@@ -339,12 +391,12 @@ const SubscriptionExtensionModal = ({
             return;
         }
 
-       try {
+        try {
             const newPaymentId = await processDatabaseUpdate(utrNumber.trim()); // <--- CAPTURE ID
             setAlert({ show: true, type: 'success', message: 'Payment recorded (Pending) & subscription extended!' });
-            
+
             const facilityName = allowedFacilities.find(f => f.id === extensionFormData.facilityId)?.name || 'Unknown';
-            
+
             const receiptData = {
                 paymentId: newPaymentId, // <--- ADDED THIS LINE
                 transactionId: utrNumber.trim(),
@@ -360,10 +412,10 @@ const SubscriptionExtensionModal = ({
 
             onSubscriptionExtended(receiptData); // Pass data
             // --- CHANGED CODE END ---
-            
+
             onClose();
         } catch (error) {
-//...
+            //...
             console.error('Extension Error:', error);
             setAlert({ show: true, type: 'error', message: error.message });
         } finally {
@@ -420,24 +472,53 @@ const SubscriptionExtensionModal = ({
                                 {loadingFees ? (
                                     <div className="text-sm text-gray-500 animate-pulse">Loading pricing...</div>
                                 ) : (
-                                    <select 
-                                        name="planType" 
-                                        value={extensionFormData.planType} 
-                                        onChange={handleExtensionInputChange} 
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" 
+                                    <select
+                                        name="planType"
+                                        value={`${extensionFormData.planType}|${extensionFormData.priceVariant}`}
+                                        onChange={handleExtensionInputChange}
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                                         disabled={!extensionFormData.facilityId || Object.keys(selectedFacilityFees).filter(k => k !== 'registration').length === 0}
                                     >
                                         {(() => {
                                             const availablePlans = Object.entries(selectedFacilityFees).filter(([key]) => key !== 'registration');
-                                            return availablePlans.length > 0 ? (
-                                                availablePlans.map(([key, value]) => (
-                                                    <option key={key} value={key}>
-                                                        {value.title || key} - ₹{targetUser?.gender === 'Male' ? value.price : value.price}
-                                                    </option>
-                                                ))
-                                            ) : (
-                                                <option value="">No plans available for this facility</option>
-                                            );
+
+                                            // Helper to generate readable labels for variants
+                                            const getVariantLabel = (variantKey) => {
+                                                switch (variantKey) {
+                                                    case 'priceMale': return 'Male';
+                                                    case 'priceFemale': return 'Female';
+                                                    case 'priceAdult': return 'Adult';
+                                                    case 'priceChild': return 'Child';
+                                                    case 'priceWithTraining': return 'With Training';
+                                                    case 'priceWithoutTraining': return 'W/o Training';
+                                                    default: return 'Standard';
+                                                }
+                                            };
+
+                                            const options = [];
+                                            availablePlans.forEach(([key, value]) => {
+                                                const planName = value.title || key;
+                                                const variants = ['priceMale', 'priceFemale', 'priceAdult', 'priceChild', 'priceWithTraining', 'priceWithoutTraining', 'price'];
+
+                                                let foundVariant = false;
+                                                variants.forEach(variant => {
+                                                    if (value[variant] !== undefined && value[variant] !== null && value[variant] !== "") {
+                                                        foundVariant = true;
+                                                        options.push(
+                                                            <option key={`${key}|${variant}`} value={`${key}|${variant}`}>
+                                                                {planName} ({getVariantLabel(variant)}) - ₹{value[variant]}
+                                                            </option>
+                                                        );
+                                                    }
+                                                });
+
+                                                // If no specific price variants found but object exists (shouldn't happen with correct data but just in case)
+                                                if (!foundVariant) {
+                                                    // Skip or show error?
+                                                }
+                                            });
+
+                                            return options.length > 0 ? options : <option value="">No plans available</option>;
                                         })()}
                                     </select>
                                 )}
@@ -447,35 +528,46 @@ const SubscriptionExtensionModal = ({
                                 <div className="flex items-center p-3 bg-blue-50 rounded-lg border border-blue-100">
                                     <input type="checkbox" name="includeRegistration" id="includeReg" checked={extensionFormData.includeRegistration} onChange={handleExtensionInputChange} className="h-4 w-4 text-blue-600 rounded border-gray-300" />
                                     <label htmlFor="includeReg" className="ml-2 block text-sm text-gray-900">
-                                        Include Registration Fee 
-                                        <span className="font-semibold text-blue-700 ml-1">(+₹{targetUser?.gender === 'Male' ? selectedFacilityFees['registration'].price : selectedFacilityFees['registration'].price})</span>
+                                        Include Registration Fee
+                                        <span className="font-semibold text-blue-700 ml-1">
+                                            (+₹{
+                                                (() => {
+                                                    const regData = selectedFacilityFees['registration'];
+                                                    const variant = extensionFormData.priceVariant;
+                                                    if (regData[variant] !== undefined) return regData[variant];
+                                                    // Fallback logic
+                                                    if (regData.price !== undefined) return regData.price;
+                                                    if (regData.priceMale !== undefined) return regData.priceMale;
+                                                    return 0;
+                                                })()
+                                            })
+                                        </span>
                                     </label>
                                 </div>
                             )}
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-    <label className="block text-sm font-medium text-gray-700 mb-1">Current Expiry Date</label>
-    <input 
-        type="text" 
-        name="startDate" 
-        value={extensionFormData.startDate ? extensionFormData.startDate.split('-').reverse().join('/') : ''} 
-        readOnly 
-        className={`w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-100 ${
-            new Date(extensionFormData.startDate) < new Date().setHours(0,0,0,0) ? 'text-red-600 font-bold border-red-300' : 'text-gray-500'
-        }`} 
-    />
-</div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Current Expiry Date</label>
+                                    <input
+                                        type="text"
+                                        name="startDate"
+                                        value={extensionFormData.startDate ? extensionFormData.startDate.split('-').reverse().join('/') : ''}
+                                        readOnly
+                                        className={`w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-100 ${new Date(extensionFormData.startDate) < new Date().setHours(0, 0, 0, 0) ? 'text-red-600 font-bold border-red-300' : 'text-gray-500'
+                                            }`}
+                                    />
+                                </div>
                                 <div>
-    <label className="block text-sm font-medium text-gray-700 mb-1">New Expiry Date</label>
-    <input 
-        type="text" 
-        // Takes YYYY-MM-DD -> Splits to array -> Reverses to DD-MM-YYYY -> Joins with /
-        value={newCalculatedEndDate !== 'N/A' ? newCalculatedEndDate.split('-').reverse().join('/') : 'N/A'} 
-        disabled 
-        className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-500" 
-    />
-</div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">New Expiry Date</label>
+                                    <input
+                                        type="text"
+                                        // Takes YYYY-MM-DD -> Splits to array -> Reverses to DD-MM-YYYY -> Joins with /
+                                        value={newCalculatedEndDate !== 'N/A' ? newCalculatedEndDate.split('-').reverse().join('/') : 'N/A'}
+                                        disabled
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-500"
+                                    />
+                                </div>
                             </div>
                         </div>
 
@@ -491,7 +583,7 @@ const SubscriptionExtensionModal = ({
                                         <div className="w-full mb-3">
                                             <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Scan QR Code</label>
                                             <div className="relative">
-                                                <select 
+                                                <select
                                                     className="w-full appearance-none bg-white border border-gray-300 text-gray-700 py-2 px-3 pr-8 rounded leading-tight focus:outline-none focus:bg-white focus:border-blue-500 text-sm"
                                                     onChange={(e) => {
                                                         const selected = qrCodes.find(qr => qr.id === e.target.value);
@@ -515,9 +607,9 @@ const SubscriptionExtensionModal = ({
                                                 <div className="absolute top-2 right-2 bg-black/50 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                                                     <ZoomIn size={16} />
                                                 </div>
-                                                <img 
-                                                    src={selectedQr.imageLink} 
-                                                    alt={selectedQr.name} 
+                                                <img
+                                                    src={selectedQr.imageLink}
+                                                    alt={selectedQr.name}
                                                     className="w-40 h-40 object-contain cursor-pointer hover:opacity-95 transition-opacity"
                                                     onClick={() => setShowLargeQr(true)}
                                                     title="Click to expand"
@@ -529,8 +621,8 @@ const SubscriptionExtensionModal = ({
                                         {/* UTR Input */}
                                         <div className="w-full">
                                             <label className="block text-sm font-medium text-gray-700 mb-1">Enter UTR Number *</label>
-                                            <input 
-                                                type="text" 
+                                            <input
+                                                type="text"
                                                 placeholder="e.g. 123456789012"
                                                 value={utrNumber}
                                                 onChange={(e) => setUtrNumber(e.target.value)}
@@ -559,19 +651,18 @@ const SubscriptionExtensionModal = ({
                         {/* Action Buttons */}
                         <div className="flex gap-3 justify-end">
                             <button onClick={onClose} className="px-5 py-2 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50">Cancel</button>
-                            <button 
-                                onClick={handleExtendSubscription} 
+                            <button
+                                onClick={handleExtendSubscription}
                                 disabled={
-                                    loading || 
-                                    calculatedFee === 0 || 
-                                    loadingFees || 
+                                    loading ||
+                                    calculatedFee === 0 ||
+                                    loadingFees ||
                                     !utrNumber.trim()
-                                } 
-                                className={`px-5 py-2 rounded-lg text-white font-medium flex items-center gap-2 ${
-                                    loading || calculatedFee === 0 || !utrNumber.trim()
-                                        ? 'bg-gray-400 cursor-not-allowed' 
-                                        : 'bg-blue-600 hover:bg-blue-700'
-                                }`}
+                                }
+                                className={`px-5 py-2 rounded-lg text-white font-medium flex items-center gap-2 ${loading || calculatedFee === 0 || !utrNumber.trim()
+                                    ? 'bg-gray-400 cursor-not-allowed'
+                                    : 'bg-blue-600 hover:bg-blue-700'
+                                    }`}
                             >
                                 {loading ? 'Processing...' : 'Record Payment'}
                             </button>
@@ -582,12 +673,12 @@ const SubscriptionExtensionModal = ({
 
             {/* FULL SCREEN QR MODAL */}
             {showLargeQr && selectedQr && (
-                <div 
+                <div
                     className="fixed inset-0 z-[60] bg-black bg-opacity-90 flex items-center justify-center p-4 animate-in fade-in duration-200"
                     onClick={() => setShowLargeQr(false)}
                 >
                     <div className="relative max-w-full max-h-full">
-                        <button 
+                        <button
                             onClick={(e) => {
                                 e.stopPropagation();
                                 setShowLargeQr(false);
@@ -596,13 +687,13 @@ const SubscriptionExtensionModal = ({
                         >
                             <X size={32} />
                         </button>
-                        <div 
+                        <div
                             className="bg-white p-4 rounded-lg shadow-2xl"
                             onClick={(e) => e.stopPropagation()}
                         >
-                            <img 
-                                src={selectedQr.imageLink} 
-                                alt={selectedQr.name} 
+                            <img
+                                src={selectedQr.imageLink}
+                                alt={selectedQr.name}
                                 className="max-w-full max-h-[80vh] object-contain"
                             />
                             <p className="text-center font-bold text-lg mt-2">{selectedQr.name}</p>

@@ -10,15 +10,17 @@ import EditFacilityModal from './EditFacilityModal';
 // Helper function to format fee display for different structures
 const formatFeeDisplay = (fee) => {
   if (!fee) return null;
-  
+
   if (fee.priceAdult !== undefined || fee.priceChild !== undefined) {
     return `A: ₹${fee.priceAdult || 0} / C: ₹${fee.priceChild || 0}`;
   } else if (fee.priceWithTraining !== undefined || fee.priceWithoutTraining !== undefined) {
     return `W Training: ₹${fee.priceWithTraining || 0} / W/o Training: ₹${fee.priceWithoutTraining || 0}`;
-  } else if (fee.price !== undefined || fee.price !== undefined) {
-    return `M: ₹${fee.price || 0} / F: ₹${fee.price || 0}`;
+  } else if (fee.priceMale !== undefined || fee.priceFemale !== undefined) {
+    return `M: ₹${fee.priceMale || 0} / F: ₹${fee.priceFemale || 0}`;
+  } else if (fee.price !== undefined) {
+    return `₹${fee.price}`;
   }
-  
+
   return null;
 };
 
@@ -52,7 +54,7 @@ export default function AdminFacilitiesPage() {
       setError(null);
       const facilitiesRef = collection(db, 'facilities');
       const snapshot = await getDocs(facilitiesRef);
-      
+
       const facilitiesData = await Promise.all(
         snapshot.docs.map(async (facilityDoc) => {
           const facilityData = {
@@ -63,7 +65,7 @@ export default function AdminFacilitiesPage() {
           // Fetch fees subcollection
           const feesRef = collection(db, 'facilities', facilityDoc.id, 'fees');
           const feesSnapshot = await getDocs(feesRef);
-          
+
           facilityData.fees = {};
           feesSnapshot.docs.forEach(feeDoc => {
             facilityData.fees[feeDoc.id] = feeDoc.data();
@@ -72,7 +74,7 @@ export default function AdminFacilitiesPage() {
           return facilityData;
         })
       );
-      
+
       setFacilities(facilitiesData);
     } catch (err) {
       console.error('Error fetching facilities:', err);
@@ -184,14 +186,13 @@ export default function AdminFacilitiesPage() {
                     <span className="text-gray-500">No Image</span>
                   </div>
                 )}
-                
+
                 {/* Status Badge */}
                 <div className="absolute top-3 right-3">
-                  <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                    facility.active 
-                      ? 'bg-green-100 text-green-800' 
-                      : 'bg-red-100 text-red-800'
-                  }`}>
+                  <span className={`px-3 py-1 rounded-full text-xs font-semibold ${facility.active
+                    ? 'bg-green-100 text-green-800'
+                    : 'bg-red-100 text-red-800'
+                    }`}>
                     {facility.active ? 'Active' : 'Inactive'}
                   </span>
                 </div>
@@ -206,7 +207,7 @@ export default function AdminFacilitiesPage() {
                 {facility.fees && Object.keys(facility.fees).length > 0 && (
                   <div className="mb-4 space-y-2">
                     <h4 className="text-sm font-semibold text-gray-700 mb-2">Subscription Plans:</h4>
-                    
+
                     {Object.entries(facility.fees)
                       .sort((a, b) => {
                         const order = ['registration', 'guest', 'training', 'oneMonth', 'threeMonth', 'sixMonth', 'year', 'withoutReg'];
@@ -215,7 +216,7 @@ export default function AdminFacilitiesPage() {
                       .map(([planKey, planData]) => {
                         const displayText = formatFeeDisplay(planData);
                         if (!displayText) return null;
-                        
+
                         return (
                           <div key={planKey} className="text-sm">
                             <span className="text-gray-600">{getPlanName(planKey)}:</span>
