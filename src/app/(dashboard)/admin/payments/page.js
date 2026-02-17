@@ -217,7 +217,7 @@ const printReceipt = (payment) => {
     <div class="header">
       <div class="header-left">
         <div class="logo-placeholder">
-           <img src="/logo_sc.webp" alt="Logo" />
+           <img src="/raigarh_logo.webp" alt="Logo" />
         </div>
         <div class="header-text">
           <div class="stadium-name">Raigarh Stadium Samiti</div>
