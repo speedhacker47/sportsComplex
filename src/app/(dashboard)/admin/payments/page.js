@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import { CreditCard, History, User, Building2, CheckCircle, AlertCircle, X, Search, Calendar, Filter, Eye, XCircle, Check, Printer, Edit, Trash2, Save, Plus, Download, FileDown } from 'lucide-react';
-import { db } from '../../../lib/firebase'; 
+import { db } from '../../../lib/firebase';
 import {
   collection,
   getDocs,
@@ -38,11 +38,11 @@ const generateInvoiceNumber = (paymentIndex, paymentDate) => {
 // Print Receipt Function
 const printReceipt = (payment) => {
   const printWindow = window.open('', '_blank');
-  
+
   // Determine Reg No display
   const regNumberDisplay = payment.user?.isGuest ? 'GUEST' : (payment.user?.regNumber || '-');
 
- const receiptHTML = `
+  const receiptHTML = `
 <!DOCTYPE html>
 <html>
 <head>
@@ -217,7 +217,7 @@ const printReceipt = (payment) => {
     <div class="header">
       <div class="header-left">
         <div class="logo-placeholder">
-           <img src="/raigarh_logo.webp" alt="Logo" />
+           <img src="/logo_sc.webp" alt="Logo" />
         </div>
         <div class="header-text">
           <div class="stadium-name">Raigarh Stadium Samiti</div>
@@ -276,11 +276,10 @@ const printReceipt = (payment) => {
 
       <div class="line-item">
         <span class="label">Status:</span>
-        <span class="value status-text ${
-          payment.status === 'Success' || payment.status === 'completed' ? 'success' :
-          payment.status === 'Failed' || payment.status === 'failed' ? 'failed' :
-          'pending'
-        }">
+        <span class="value status-text ${payment.status === 'Success' || payment.status === 'completed' ? 'success' :
+      payment.status === 'Failed' || payment.status === 'failed' ? 'failed' :
+        'pending'
+    }">
           ${payment.status === 'completed' ? 'COMPLETED' : payment.status}
         </span>
       </div>
@@ -371,10 +370,10 @@ const EditPaymentModal = ({ isOpen, onClose, payment, onSave, loading }) => {
   const addMonth = () => {
     const monthName = new Date(addYearVal, addMonthVal).toLocaleString('default', { month: 'long' });
     const newMonthStr = `${monthName} ${addYearVal}`;
-    
+
     if (!formData.months.includes(newMonthStr)) {
-        const updatedMonths = [...formData.months, newMonthStr];
-        setFormData(prev => ({ ...prev, months: updatedMonths }));
+      const updatedMonths = [...formData.months, newMonthStr];
+      setFormData(prev => ({ ...prev, months: updatedMonths }));
     }
   };
 
@@ -389,14 +388,14 @@ const EditPaymentModal = ({ isOpen, onClose, payment, onSave, loading }) => {
           </h2>
           <button onClick={onClose}><X size={20} className="text-gray-500 hover:text-gray-700" /></button>
         </div>
-        
+
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Transaction ID</label>
             <input
               type="text"
               value={formData.transactionId}
-              onChange={(e) => setFormData({...formData, transactionId: e.target.value})}
+              onChange={(e) => setFormData({ ...formData, transactionId: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
@@ -407,7 +406,7 @@ const EditPaymentModal = ({ isOpen, onClose, payment, onSave, loading }) => {
               <input
                 type="number"
                 value={formData.amount}
-                onChange={(e) => setFormData({...formData, amount: Number(e.target.value)})}
+                onChange={(e) => setFormData({ ...formData, amount: Number(e.target.value) })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
@@ -415,7 +414,7 @@ const EditPaymentModal = ({ isOpen, onClose, payment, onSave, loading }) => {
               <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
               <select
                 value={formData.status}
-                onChange={(e) => setFormData({...formData, status: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, status: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="completed">Completed</option>
@@ -427,64 +426,64 @@ const EditPaymentModal = ({ isOpen, onClose, payment, onSave, loading }) => {
           </div>
 
           <div>
-             <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
-             <select
-                value={formData.method}
-                onChange={(e) => setFormData({...formData, method: e.target.value})}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="Online">Online</option>
-                <option value="Cash">Cash</option>
-                <option value="UPI">UPI</option>
-                <option value="Card">Card</option>
-                <option value="Bank Transfer">Bank Transfer</option>
-              </select>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
+            <select
+              value={formData.method}
+              onChange={(e) => setFormData({ ...formData, method: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="Online">Online</option>
+              <option value="Cash">Cash</option>
+              <option value="UPI">UPI</option>
+              <option value="Card">Card</option>
+              <option value="Bank Transfer">Bank Transfer</option>
+            </select>
           </div>
 
           <div className="border p-3 rounded-lg bg-gray-50">
             <label className="block text-sm font-medium text-gray-700 mb-2">Edit Months</label>
-            
+
             <div className="flex flex-wrap gap-2 mb-3">
-                {formData.months.length > 0 ? (
-                    formData.months.map((m, idx) => (
-                        <span key={idx} className="bg-white border border-blue-200 text-blue-700 px-2 py-1 rounded text-xs flex items-center gap-1 shadow-sm">
-                            {m}
-                            <button type="button" onClick={() => removeMonth(idx)} className="text-red-500 hover:text-red-700">
-                                <X size={12} />
-                            </button>
-                        </span>
-                    ))
-                ) : (
-                    <span className="text-xs text-gray-400 italic">No specific months listed</span>
-                )}
+              {formData.months.length > 0 ? (
+                formData.months.map((m, idx) => (
+                  <span key={idx} className="bg-white border border-blue-200 text-blue-700 px-2 py-1 rounded text-xs flex items-center gap-1 shadow-sm">
+                    {m}
+                    <button type="button" onClick={() => removeMonth(idx)} className="text-red-500 hover:text-red-700">
+                      <X size={12} />
+                    </button>
+                  </span>
+                ))
+              ) : (
+                <span className="text-xs text-gray-400 italic">No specific months listed</span>
+              )}
             </div>
 
             <div className="flex gap-2">
-                <select 
-                    value={addMonthVal} 
-                    onChange={(e) => setAddMonthVal(e.target.value)}
-                    className="w-1/3 px-2 py-1 text-sm border border-gray-300 rounded"
-                >
-                    {Array.from({length: 12}, (_, i) => (
-                        <option key={i} value={i}>{new Date(0, i).toLocaleString('default', {month: 'short'})}</option>
-                    ))}
-                </select>
-                <select 
-                    value={addYearVal} 
-                    onChange={(e) => setAddYearVal(e.target.value)}
-                    className="w-1/3 px-2 py-1 text-sm border border-gray-300 rounded"
-                >
-                    {Array.from({length: 5}, (_, i) => new Date().getFullYear() - 1 + i).map(y => (
-                        <option key={y} value={y}>{y}</option>
-                    ))}
-                </select>
-                <button 
-                    type="button" 
-                    onClick={addMonth}
-                    className="flex-1 bg-green-500 text-white rounded text-sm hover:bg-green-600 flex justify-center items-center"
-                >
-                    <Plus size={16} /> Add
-                </button>
+              <select
+                value={addMonthVal}
+                onChange={(e) => setAddMonthVal(e.target.value)}
+                className="w-1/3 px-2 py-1 text-sm border border-gray-300 rounded"
+              >
+                {Array.from({ length: 12 }, (_, i) => (
+                  <option key={i} value={i}>{new Date(0, i).toLocaleString('default', { month: 'short' })}</option>
+                ))}
+              </select>
+              <select
+                value={addYearVal}
+                onChange={(e) => setAddYearVal(e.target.value)}
+                className="w-1/3 px-2 py-1 text-sm border border-gray-300 rounded"
+              >
+                {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 1 + i).map(y => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={addMonth}
+                className="flex-1 bg-green-500 text-white rounded text-sm hover:bg-green-600 flex justify-center items-center"
+              >
+                <Plus size={16} /> Add
+              </button>
             </div>
           </div>
 
@@ -493,7 +492,7 @@ const EditPaymentModal = ({ isOpen, onClose, payment, onSave, loading }) => {
             <input
               type="datetime-local"
               value={formData.paymentDate}
-              onChange={(e) => setFormData({...formData, paymentDate: e.target.value})}
+              onChange={(e) => setFormData({ ...formData, paymentDate: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
@@ -555,29 +554,28 @@ const PaymentDetailsModal = ({ isOpen, onClose, payment, user, facility, subscri
             </div>
             <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
               <p className="text-sm font-medium text-gray-600">Status</p>
-              <span className={`px-3 py-1 text-sm font-semibold rounded-full ${
-                payment.status === 'Success' || payment.status === 'completed' ? 'bg-green-100 text-green-800' :
-                payment.status === 'Failed' || payment.status === 'failed' ? 'bg-red-100 text-red-800' :
-                'bg-yellow-100 text-yellow-800'
-              }`}>
+              <span className={`px-3 py-1 text-sm font-semibold rounded-full ${payment.status === 'Success' || payment.status === 'completed' ? 'bg-green-100 text-green-800' :
+                  payment.status === 'Failed' || payment.status === 'failed' ? 'bg-red-100 text-red-800' :
+                    'bg-yellow-100 text-yellow-800'
+                }`}>
                 {payment.status === 'completed' ? 'Completed' : payment.status}
               </span>
             </div>
             {payment.qrCodeName && (
-               <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
                 <p className="text-sm font-medium text-gray-600">QR Code Used</p>
                 <p className="text-lg font-semibold text-gray-900">{payment.qrCodeName}</p>
               </div>
             )}
-             {payment.month && payment.month.length > 0 && (
-               <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 col-span-2">
+            {payment.month && payment.month.length > 0 && (
+              <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 col-span-2">
                 <p className="text-sm font-medium text-gray-600">Months Covered</p>
                 <div className="flex flex-wrap gap-2 mt-1">
-                    {payment.month.map((m, i) => (
-                        <span key={i} className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded border border-blue-200 font-medium">
-                            {m}
-                        </span>
-                    ))}
+                  {payment.month.map((m, i) => (
+                    <span key={i} className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded border border-blue-200 font-medium">
+                      {m}
+                    </span>
+                  ))}
                 </div>
               </div>
             )}
@@ -672,7 +670,7 @@ const PaymentsPage = () => {
       const endOfMonth = new Date(fetchYear, fetchMonth + 1, 0, 23, 59, 59, 999);
 
       const paymentsRef = collection(db, 'payments');
-      
+
       // Query with date range to limit documents fetched
       const q = query(
         paymentsRef,
@@ -683,7 +681,7 @@ const PaymentsPage = () => {
 
       const paymentsSnap = await getDocs(q);
 
-       const paymentsData = await Promise.all(
+      const paymentsData = await Promise.all(
         paymentsSnap.docs.map(async (paymentDoc) => {
           const payment = { id: paymentDoc.id, ...paymentDoc.data() };
 
@@ -693,60 +691,60 @@ const PaymentsPage = () => {
 
           if (payment.userId) {
             if (typeof payment.userId.get === 'function') {
-                const userDoc = await getDoc(payment.userId);
+              const userDoc = await getDoc(payment.userId);
+              if (userDoc.exists()) {
+                userData = { id: userDoc.id, ...userDoc.data() };
+              }
+            }
+            else if (typeof payment.userId === 'string') {
+              if (payment.isGuest === true) {
+                const guestDoc = await getDoc(doc(db, 'guests', payment.userId));
+                if (guestDoc.exists()) {
+                  userData = { id: guestDoc.id, ...guestDoc.data(), isGuest: true };
+                }
+              } else {
+                let userDoc = await getDoc(doc(db, 'users', payment.userId));
                 if (userDoc.exists()) {
                   userData = { id: userDoc.id, ...userDoc.data() };
-                }
-            } 
-            else if (typeof payment.userId === 'string') {
-                if (payment.isGuest === true) {
-                    const guestDoc = await getDoc(doc(db, 'guests', payment.userId));
-                    if (guestDoc.exists()) {
-                        userData = { id: guestDoc.id, ...guestDoc.data(), isGuest: true };
-                    }
                 } else {
-                    let userDoc = await getDoc(doc(db, 'users', payment.userId));
-                    if (userDoc.exists()) {
-                        userData = { id: userDoc.id, ...userDoc.data() };
-                    } else {
-                        const guestDoc = await getDoc(doc(db, 'guests', payment.userId));
-                        if (guestDoc.exists()) {
-                            userData = { id: guestDoc.id, ...guestDoc.data(), isGuest: true };
-                        }
-                    }
+                  const guestDoc = await getDoc(doc(db, 'guests', payment.userId));
+                  if (guestDoc.exists()) {
+                    userData = { id: guestDoc.id, ...guestDoc.data(), isGuest: true };
+                  }
                 }
+              }
             }
           }
 
           if (payment.facilityId && typeof payment.facilityId.get === 'function') {
-            const facilityDoc = await getDoc(payment.facilityId); 
+            const facilityDoc = await getDoc(payment.facilityId);
             if (facilityDoc.exists()) {
               facilityData = { id: facilityDoc.id, ...facilityDoc.data() };
             }
           } else if (typeof payment.facilityId === 'string') {
-                const facilityDoc = await getDoc(doc(db, 'facilities', payment.facilityId));
-                if (facilityDoc.exists()) {
-                    facilityData = { id: facilityDoc.id, ...facilityDoc.data() };
-                }
+            const facilityDoc = await getDoc(doc(db, 'facilities', payment.facilityId));
+            if (facilityDoc.exists()) {
+              facilityData = { id: facilityDoc.id, ...facilityDoc.data() };
             }
+          }
 
           if (payment.subscriptionId && typeof payment.subscriptionId.get === 'function') {
-              const subscriptionDoc = await getDoc(payment.subscriptionId); 
-              if (subscriptionDoc.exists()) {
-                  subscriptionData = { id: subscriptionDoc.id, ...subscriptionDoc.data() };
-              }
+            const subscriptionDoc = await getDoc(payment.subscriptionId);
+            if (subscriptionDoc.exists()) {
+              subscriptionData = { id: subscriptionDoc.id, ...subscriptionDoc.data() };
+            }
           } else if (typeof payment.subscriptionId === 'string') {
-              const parts = payment.subscriptionId.split('/');
-              if (parts.length >= 4 && parts[0] === 'users' && parts[2] === 'subscriptions') {
-                  const userId = parts[1];
-                  const subId = parts[3];
-                  if (userId && subId) {
-                      const subscriptionDoc = await getDoc(doc(db, 'users', userId, 'subscriptions', subId));
-                      if (subscriptionDoc.exists()) {
-                          subscriptionData = { id: subscriptionDoc.id, ...subscriptionDoc.data() };
-                      }
-                  }
+            const parts = payment.subscriptionId.split('/');
+            if (parts.length >= 4 && parts[0] === 'users' && parts[2] === 'subscriptions') {
+              const userId = parts[1];
+              const subId = parts[3];
+              if (userId && subId) {
+                const subscriptionDoc = await getDoc(doc(db, 'users', userId, 'subscriptions', subId));
+                if (subscriptionDoc.exists()) {
+                  subscriptionData = { id: subscriptionDoc.id, ...subscriptionDoc.data() };
+                }
               }
+            }
           }
 
           return {
@@ -759,7 +757,7 @@ const PaymentsPage = () => {
       );
 
       setPayments(paymentsData);
-      
+
       const uniqueFacilities = [...new Set(paymentsData
         .map(p => p.facility?.name || p.facilityId)
         .filter(Boolean))];
@@ -784,8 +782,8 @@ const PaymentsPage = () => {
   };
 
   const handleDeletePayment = async (paymentId) => {
-    if(!window.confirm("Are you sure you want to permanently delete this payment? This action cannot be undone.")) return;
-    
+    if (!window.confirm("Are you sure you want to permanently delete this payment? This action cannot be undone.")) return;
+
     setActionLoading(paymentId);
     try {
       await deleteDoc(doc(db, 'payments', paymentId));
@@ -808,7 +806,7 @@ const PaymentsPage = () => {
     setActionLoading(id);
     try {
       const paymentRef = doc(db, 'payments', id);
-      
+
       const updatePayload = {
         amount: updatedData.amount,
         transactionId: updatedData.transactionId,
@@ -849,7 +847,7 @@ const PaymentsPage = () => {
   };
 
   const handleStatusUpdate = async (paymentId, newStatus) => {
-    if(!window.confirm(`Are you sure you want to mark this payment as ${newStatus}?`)) return;
+    if (!window.confirm(`Are you sure you want to mark this payment as ${newStatus}?`)) return;
 
     setActionLoading(paymentId);
     try {
@@ -858,7 +856,7 @@ const PaymentsPage = () => {
         status: newStatus
       });
 
-      setPayments(prevPayments => 
+      setPayments(prevPayments =>
         prevPayments.map(p => p.id === paymentId ? { ...p, status: newStatus } : p)
       );
 
@@ -873,31 +871,31 @@ const PaymentsPage = () => {
 
   const filteredPayments = payments.filter(payment => {
     const matchesSearch = (payment.transactionId?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-                          (payment.user?.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-                          String(payment.user?.mobile || '').includes(searchTerm) ||
-                          (payment.id || '').toLowerCase().includes(searchTerm.toLowerCase());
-    
+      (payment.user?.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+      String(payment.user?.mobile || '').includes(searchTerm) ||
+      (payment.id || '').toLowerCase().includes(searchTerm.toLowerCase());
+
     const matchesStatus = filterStatus === 'all' || payment.status === filterStatus;
-    
-    const matchesFacility = filterFacility === 'all' || 
-                            payment.facility?.name === filterFacility ||
-                            payment.facilityId === filterFacility;
-    
+
+    const matchesFacility = filterFacility === 'all' ||
+      payment.facility?.name === filterFacility ||
+      payment.facilityId === filterFacility;
+
     let matchesDate = true;
     if (payment.paymentDate && filterPeriod !== 'all') {
       const paymentDate = payment.paymentDate.toDate();
-      
+
       if (filterPeriod === 'daily' && selectedDate) {
         const selected = new Date(selectedDate);
         matchesDate = paymentDate.toDateString() === selected.toDateString();
       } else if (filterPeriod === 'monthly' && selectedMonth && selectedYear) {
         matchesDate = paymentDate.getMonth() === parseInt(selectedMonth) &&
-                      paymentDate.getFullYear() === parseInt(selectedYear);
+          paymentDate.getFullYear() === parseInt(selectedYear);
       } else if (filterPeriod === 'yearly' && selectedYear) {
         matchesDate = paymentDate.getFullYear() === parseInt(selectedYear);
       }
     }
-    
+
     return matchesSearch && matchesStatus && matchesFacility && matchesDate;
   });
 
@@ -928,10 +926,10 @@ const PaymentsPage = () => {
     try {
       const monthName = new Date(fetchYear, fetchMonth).toLocaleString('default', { month: 'long' });
       const facilitySummary = getFacilitySummary(); // Calculate summary data
-      
+
       const printWindow = window.open('', '_blank');
 
-       const paymentsToExport = [...filteredPayments].sort((a, b) => a.paymentDate - b.paymentDate);
+      const paymentsToExport = [...filteredPayments].sort((a, b) => a.paymentDate - b.paymentDate);
       // Generate Rows for Main Table
       const paymentRows = paymentsToExport.map((payment, index) => `
         <tr class="${index % 2 === 0 ? 'even' : 'odd'}">
@@ -949,10 +947,9 @@ const PaymentsPage = () => {
           <td>${payment.method || '-'}</td>
           <td>${formatTimestamp(payment.paymentDate)}</td>
           <td>
-            <span class="status-badge ${
-              payment.status === 'Success' || payment.status === 'completed' ? 'success' :
-              payment.status === 'Failed' || payment.status === 'failed' ? 'failed' : 'pending'
-            }">
+            <span class="status-badge ${payment.status === 'Success' || payment.status === 'completed' ? 'success' :
+          payment.status === 'Failed' || payment.status === 'failed' ? 'failed' : 'pending'
+        }">
               ${payment.status === 'completed' ? 'COMPLETED' : payment.status}
             </span>
           </td>
@@ -1141,7 +1138,7 @@ const PaymentsPage = () => {
 
       printWindow.document.write(htmlContent);
       printWindow.document.close(); // Important for styles to load
-      
+
       setAlert({ show: true, type: 'success', message: 'Print window opened successfully!' });
     } catch (error) {
       console.error('Error generating report:', error);
@@ -1156,7 +1153,7 @@ const PaymentsPage = () => {
     setExportLoading(true);
     try {
       const monthName = new Date(fetchYear, fetchMonth).toLocaleString('default', { month: 'long' });
-      
+
       // Prepare data for main sheet
       const excelData = filteredPayments.map(payment => ({
         'Transaction ID': payment.transactionId || payment.id || '',
@@ -1190,10 +1187,10 @@ const PaymentsPage = () => {
 
       // Create workbook
       const wb = XLSX.utils.book_new();
-      
+
       // Main data sheet
       const ws1 = XLSX.utils.json_to_sheet(excelData);
-      
+
       // Set column widths
       ws1['!cols'] = [
         { wch: 25 }, // Transaction ID
@@ -1209,9 +1206,9 @@ const PaymentsPage = () => {
         { wch: 12 }, // Status
         { wch: 15 }  // Plan Type
       ];
-      
+
       XLSX.utils.book_append_sheet(wb, ws1, 'Payments');
-      
+
       // Summary sheet
       const ws2 = XLSX.utils.json_to_sheet(summaryData);
       ws2['!cols'] = [
@@ -1249,9 +1246,8 @@ const PaymentsPage = () => {
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       {alert.show && (
-        <div className={`fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg ${
-          alert.type === 'success' ? 'bg-green-500' : 'bg-red-500'
-        } text-white`}>
+        <div className={`fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg ${alert.type === 'success' ? 'bg-green-500' : 'bg-red-500'
+          } text-white`}>
           {alert.type === 'success' ? <CheckCircle size={20} /> : <AlertCircle size={20} />}
           <span>{alert.message}</span>
           <button onClick={() => setAlert({ show: false, type: '', message: '' })}>
@@ -1265,7 +1261,7 @@ const PaymentsPage = () => {
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Payment History</h1>
           <p className="text-gray-600">View and manage all payment transactions</p>
         </div>
-        
+
         {/* Month/Year Selector */}
         <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
           <div className="flex items-center gap-2 mb-2">
@@ -1346,7 +1342,7 @@ const PaymentsPage = () => {
           >
             Reset All
           </button>
-          
+
           {/* Export Buttons */}
           <div className="flex gap-2 ml-4">
             <button
@@ -1430,7 +1426,7 @@ const PaymentsPage = () => {
                 className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               />
             )}
-            
+
             {(filterPeriod === 'monthly' || filterPeriod === 'yearly') && (
               <select
                 value={selectedYear}
@@ -1443,7 +1439,7 @@ const PaymentsPage = () => {
                 ))}
               </select>
             )}
-            
+
             {filterPeriod === 'monthly' && (
               <select
                 value={selectedMonth}
@@ -1498,7 +1494,7 @@ const PaymentsPage = () => {
                     <tr key={payment.id} className="hover:bg-gray-50">
                       <td className="px-2 py-4 text-xs text-gray-900">
                         <span className="font-medium">{payment.transactionId || payment.id}</span>
-                        <br/>
+                        <br />
                         <span className="text-gray-500">{payment.invoiceNo || payment.invoiceNumber}</span>
                       </td>
                       <td className="px-2 py-4 text-sm text-gray-600">
@@ -1506,21 +1502,21 @@ const PaymentsPage = () => {
                         {payment.user?.isGuest && <span className="text-[10px] bg-gray-200 px-1 rounded ml-1 text-gray-600">Guest</span>}
                       </td>
                       <td className="px-2 py-4 text-sm text-gray-600">{payment.facility?.name || payment.facilityId || 'N/A'}</td>
-                      
+
                       <td className="px-2 py-4 text-xs text-gray-700">
                         {payment.month && payment.month.length > 0 ? (
-                           <div className="flex flex-wrap gap-1 max-w-[200px]">
-                              {payment.month.map((m, i) => (
-                                <span key={i} className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-[10px] border border-gray-200 whitespace-nowrap">
-                                  {m}
-                                </span>
-                              ))}
-                           </div>
+                          <div className="flex flex-wrap gap-1 max-w-[200px]">
+                            {payment.month.map((m, i) => (
+                              <span key={i} className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-[10px] border border-gray-200 whitespace-nowrap">
+                                {m}
+                              </span>
+                            ))}
+                          </div>
                         ) : payment.startDate && payment.endDate ? (
                           <>
-                            <div>{payment.startDate.toDate().toLocaleDateString('en-GB', {day: '2-digit', month: 'short', year: '2-digit'})}</div>
+                            <div>{payment.startDate.toDate().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })}</div>
                             <div className="text-gray-400 text-[10px]">to</div>
-                            <div>{payment.endDate.toDate().toLocaleDateString('en-GB', {day: '2-digit', month: 'short', year: '2-digit'})}</div>
+                            <div>{payment.endDate.toDate().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })}</div>
                           </>
                         ) : (
                           <span className="text-gray-400">-</span>
@@ -1531,11 +1527,10 @@ const PaymentsPage = () => {
                       <td className="px-2 py-4 text-sm text-gray-600">{payment.method || 'N/A'}</td>
                       <td className="px-2 py-4 text-xs text-gray-600">{formatTimestamp(payment.paymentDate)}</td>
                       <td className="px-2 py-4">
-                        <span className={`px-2 py-1 text-[10px] font-semibold rounded-full ${
-                          payment.status === 'Success' || payment.status === 'completed' ? 'bg-green-100 text-green-800' :
-                          payment.status === 'Failed' || payment.status === 'failed' ? 'bg-red-100 text-red-800' :
-                          'bg-yellow-100 text-yellow-800'
-                        }`}>
+                        <span className={`px-2 py-1 text-[10px] font-semibold rounded-full ${payment.status === 'Success' || payment.status === 'completed' ? 'bg-green-100 text-green-800' :
+                            payment.status === 'Failed' || payment.status === 'failed' ? 'bg-red-100 text-red-800' :
+                              'bg-yellow-100 text-yellow-800'
+                          }`}>
                           {payment.status === 'completed' ? 'Completed' : payment.status}
                         </span>
                       </td>
@@ -1549,7 +1544,7 @@ const PaymentsPage = () => {
                             >
                               <Eye size={12} />
                             </button>
-                            
+
                             <button
                               onClick={() => printReceipt(payment)}
                               className="px-6 py-1 bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 text-xs font-medium border border-blue-200 flex items-center gap-1"
@@ -1559,7 +1554,7 @@ const PaymentsPage = () => {
                             </button>
                           </div>
 
-                           <div className="flex gap-1 flex-wrap">
+                          <div className="flex gap-1 flex-wrap">
                             <button
                               onClick={() => handleEditClick(payment)}
                               className="px-6 py-1 bg-gray-50 text-gray-600 rounded-md hover:bg-gray-100 text-xs font-medium border border-gray-200 flex items-center gap-1"
@@ -1575,7 +1570,7 @@ const PaymentsPage = () => {
                             >
                               <Trash2 size={12} />
                             </button>
-                           </div>
+                          </div>
 
                           {payment.status === 'pending' && (
                             <div className="flex gap-1 flex-wrap">
@@ -1617,7 +1612,7 @@ const PaymentsPage = () => {
         subscription={selectedPaymentDetails?.subscription}
       />
 
-      <EditPaymentModal 
+      <EditPaymentModal
         isOpen={showEditModal}
         onClose={() => setShowEditModal(false)}
         payment={editingPayment}
