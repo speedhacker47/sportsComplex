@@ -6,12 +6,12 @@ import Link from 'next/link';
 import { useAuth } from '../../../contexts/AuthContext';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
-import { 
-  FiCalendar, 
-  FiUsers, 
-  FiSettings, 
-  FiLogOut, 
-  FiChevronDown, 
+import {
+  FiCalendar,
+  FiUsers,
+  FiSettings,
+  FiLogOut,
+  FiChevronDown,
   FiChevronRight,
   FiMenu,
   FiX,
@@ -23,9 +23,9 @@ import {
 
 // Navigation links
 const navLinks = [
-  { 
-    name: 'Facilities', 
-    href: '/admin/facilities', 
+  {
+    name: 'Facilities',
+    href: '/admin/facilities',
     icon: FiCalendar,
     description: 'Manage facilities and resources'
   },
@@ -35,16 +35,16 @@ const navLinks = [
     icon: FiUsers,
     description: 'Manage staff members'
   },
-  
-  { 
-    name: 'Members', 
-    href: '/admin/members', 
+
+  {
+    name: 'Members',
+    href: '/admin/members',
     icon: FiFileText,
     description: 'Manage member accounts'
   },
-  { 
-    name: 'Payments', 
-    href: '/admin/payments', 
+  {
+    name: 'Payments',
+    href: '/admin/payments',
     icon: FiCalendar,
     description: 'View Payment records'
   },
@@ -53,6 +53,12 @@ const navLinks = [
     href: '/admin/academyPayments',
     icon: FiCalendar,
     description: 'Manage academy payment records'
+  },
+  {
+    name: 'Other Facilities',
+    href: '/admin/other-facilities',
+    icon: FiCalendar,
+    description: 'Manage other facilities'
   }
 ];
 
@@ -79,23 +85,23 @@ export default function Sidebar({ isCollapsed = false, onToggle }) {
     const hasSubLinks = link.subLinks && link.subLinks.length > 0;
     const IconComponent = link.icon;
 
-    
+
 
     return (
       <li>
-        <Link 
+        <Link
           href={link.href}
           className={`
             flex items-center w-full px-4 py-3 text-sm font-medium transition-all duration-200 rounded-lg mx-3
-            ${isActive 
-              ? 'text-brand-primary bg-blue-50' 
+            ${isActive
+              ? 'text-brand-primary bg-blue-50'
               : 'text-gray-700 hover:text-gray-900 hover:bg-gray-100'
             }
             ${isCollapsed ? 'justify-center px-2' : ''}
           `}
         >
           <IconComponent className={`w-5 h-5 ${isCollapsed ? '' : 'mr-3'} flex-shrink-0`} />
-          
+
           {!isCollapsed && (
             <>
               <div className="flex-1">
@@ -146,7 +152,7 @@ export default function Sidebar({ isCollapsed = false, onToggle }) {
       flex-shrink-0 transition-all duration-300 ease-in-out
       flex flex-col h-full relative z-50
     `}>
-      
+
       {/* Header */}
       <div className={`p-6 border-b border-gray-200 ${isCollapsed ? 'px-4' : ''}`}>
         <div className="flex items-center justify-between">
@@ -163,12 +169,12 @@ export default function Sidebar({ isCollapsed = false, onToggle }) {
               </div>
               <div>
                 <h1 className="text-xl font-bold text-text-primary">Sports Complex</h1>
-        
+
               </div>
             </div>
           ) : (
             <div className="w-10 h-10 bg-gradient-to-br from-brand-primary to-blue-700 rounded-xl flex items-center justify-center mx-auto">
-               <Image
+              <Image
                 src="/kartavya.webp"
                 alt="Kartavya Logo"
                 width={40}
@@ -177,7 +183,7 @@ export default function Sidebar({ isCollapsed = false, onToggle }) {
               />
             </div>
           )}
-          
+
           {!isCollapsed && onToggle && (
             <button onClick={onToggle} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500">
               <FiX className="w-5 h-5" />
@@ -196,12 +202,12 @@ export default function Sidebar({ isCollapsed = false, onToggle }) {
       {/* Bottom Section */}
       <div className="border-t border-gray-200 p-4 space-y-2">
         {/* Feedback Link */}
-        <Link 
+        <Link
           href="feedback"
           className={`
             flex items-center w-full px-3 py-2 text-sm font-medium transition-all duration-200 rounded-lg
             ${pathname.startsWith('/feedback')
-              ? 'text-brand-primary bg-blue-50' 
+              ? 'text-brand-primary bg-blue-50'
               : 'text-gray-700 hover:text-gray-900 hover:bg-gray-100'
             }
             ${isCollapsed ? 'justify-center' : ''}

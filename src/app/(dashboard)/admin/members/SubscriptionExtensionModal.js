@@ -22,6 +22,23 @@ const calculateEndDate = (startDate, planType, duration) => {
     return end.toISOString().split('T')[0];
 };
 
+// Helper: Generate Month Array from Date Range
+const getMonthsInRange = (startDate, endDate) => {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const months = [];
+    let current = new Date(start);
+
+    while (current <= end) {
+        const monthYear = current.toLocaleString('default', { month: 'long', year: 'numeric' });
+        if (!months.includes(monthYear)) {
+            months.push(monthYear);
+        }
+        current.setMonth(current.getMonth() + 1);
+    }
+    return months;
+};
+
 const SubscriptionExtensionModal = ({
     isOpen, onClose, memberUser, user, staffData, facilities,
     onSubscriptionExtended, setAlert, selectedFacilityId
@@ -156,35 +173,11 @@ const SubscriptionExtensionModal = ({
                 setSelectedFacilityFees(feesData);
 
                 const availablePlans = Object.keys(feesData).filter(key => key !== 'registration');
-
-                let newPlanType = extensionFormData.planType;
-                let newPriceVariant = '';
-
-                if (availablePlans.length > 0) {
-                    if (!availablePlans.includes(newPlanType)) {
-                        newPlanType = availablePlans[0];
-                    }
-                    // Determine a default variant for this plan
-                    const planData = feesData[newPlanType];
-                    if (planData) {
-                        // Default priority: Male -> Female -> Adult -> Child -> etc.
-                        if (planData.priceMale !== undefined) newPriceVariant = 'priceMale';
-                        else if (planData.priceFemale !== undefined) newPriceVariant = 'priceFemale';
-                        else if (planData.priceAdult !== undefined) newPriceVariant = 'priceAdult';
-                        else if (planData.priceChild !== undefined) newPriceVariant = 'priceChild';
-                        else if (planData.priceWithTraining !== undefined) newPriceVariant = 'priceWithTraining';
-                        else if (planData.priceWithoutTraining !== undefined) newPriceVariant = 'priceWithoutTraining';
-                        else newPriceVariant = 'price';
-                    }
-                } else {
-                    newPlanType = '';
+                if (availablePlans.length > 0 && !availablePlans.includes(extensionFormData.planType)) {
+                    setExtensionFormData(prev => ({ ...prev, planType: availablePlans[0] }));
+                } else if (availablePlans.length === 0) {
+                    setExtensionFormData(prev => ({ ...prev, planType: '' }));
                 }
-
-                setExtensionFormData(prev => ({
-                    ...prev,
-                    planType: newPlanType,
-                    priceVariant: newPriceVariant
-                }));
             } catch (error) {
                 console.error('Error loading fees:', error);
                 setAlert({ show: true, type: 'error', message: 'Error loading facility fees.' });
@@ -198,39 +191,20 @@ const SubscriptionExtensionModal = ({
     }, [extensionFormData.facilityId, isOpen, fetchingSub]);
 
     // Calculate fee
-    // Calculate fee
     useEffect(() => {
-        if (!selectedFacilityFees[extensionFormData.planType]) {
+        if (!targetUser || !selectedFacilityFees[extensionFormData.planType]) {
             setCalculatedFee(0);
             return;
         }
-
         const feeData = selectedFacilityFees[extensionFormData.planType];
-
-        // Use explicitly selected variant, or fallback to 0
-        let fee = 0;
-        const variant = extensionFormData.priceVariant || 'price'; // default fallback
-        fee = Number(feeData[variant]) || 0;
-
+        const userGender = targetUser.gender || 'Male';
+        let fee = userGender === 'Male' ? feeData.price : feeData.price;
         if (extensionFormData.includeRegistration && extensionFormData.planType !== 'withoutReg' && selectedFacilityFees['registration']) {
-            const regFeeData = selectedFacilityFees['registration'];
-            let regFee = 0;
-
-            // Try to match the registration fee variant to the main fee variant if possible
-            if (regFeeData[variant] !== undefined) {
-                regFee = Number(regFeeData[variant]) || 0;
-            } else if (regFeeData.price !== undefined) {
-                regFee = Number(regFeeData.price) || 0;
-            } else {
-                // Fallback loops
-                if (regFeeData.priceMale !== undefined) regFee = regFeeData.priceMale;
-                else if (regFeeData.priceAdult !== undefined) regFee = regFeeData.priceAdult;
-                else if (regFeeData.priceWithTraining !== undefined) regFee = regFeeData.priceWithTraining;
-            }
+            const regFee = userGender === 'Male' ? selectedFacilityFees['registration'].price : selectedFacilityFees['registration'].price;
             fee += regFee;
         }
         setCalculatedFee(fee);
-    }, [extensionFormData.planType, extensionFormData.priceVariant, extensionFormData.includeRegistration, selectedFacilityFees]);
+    }, [extensionFormData.planType, extensionFormData.includeRegistration, selectedFacilityFees, targetUser?.gender]);
 
     const handleExtensionInputChange = (e) => {
         const { name, value, type, checked } = e.target;
@@ -268,15 +242,6 @@ const SubscriptionExtensionModal = ({
                 }
             };
             fetchNewFacilitySub();
-        } else if (name === 'planType') {
-            // Value is expected to be "planKey|variantKey" or just "planKey" (if legacy/no-variant)
-            // But to simplify rendering logic let's assume we format the value in the option.
-            const [selectedPlan, selectedVariant] = value.split('|');
-            setExtensionFormData(prev => ({
-                ...prev,
-                planType: selectedPlan,
-                priceVariant: selectedVariant || ''
-            }));
         } else {
             setExtensionFormData(prev => ({
                 ...prev,
@@ -344,6 +309,7 @@ const SubscriptionExtensionModal = ({
                 startDate: startDateTimestamp,
                 endDate: endDateTimestamp,
                 subscription: `${targetUser.id}/${subscriptionRef.id}`,
+                month: getMonthsInRange(extensionFormData.startDate, calculateEndDate(extensionFormData.startDate, extensionFormData.planType, duration)), // <--- ADDED Month Array
                 invoiceNo: newInvoiceNo // <--- NEW FIELD
             };
 
@@ -474,51 +440,22 @@ const SubscriptionExtensionModal = ({
                                 ) : (
                                     <select
                                         name="planType"
-                                        value={`${extensionFormData.planType}|${extensionFormData.priceVariant}`}
+                                        value={extensionFormData.planType}
                                         onChange={handleExtensionInputChange}
                                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                                         disabled={!extensionFormData.facilityId || Object.keys(selectedFacilityFees).filter(k => k !== 'registration').length === 0}
                                     >
                                         {(() => {
                                             const availablePlans = Object.entries(selectedFacilityFees).filter(([key]) => key !== 'registration');
-
-                                            // Helper to generate readable labels for variants
-                                            const getVariantLabel = (variantKey) => {
-                                                switch (variantKey) {
-                                                    case 'priceMale': return 'Male';
-                                                    case 'priceFemale': return 'Female';
-                                                    case 'priceAdult': return 'Adult';
-                                                    case 'priceChild': return 'Child';
-                                                    case 'priceWithTraining': return 'With Training';
-                                                    case 'priceWithoutTraining': return 'W/o Training';
-                                                    default: return 'Standard';
-                                                }
-                                            };
-
-                                            const options = [];
-                                            availablePlans.forEach(([key, value]) => {
-                                                const planName = value.title || key;
-                                                const variants = ['priceMale', 'priceFemale', 'priceAdult', 'priceChild', 'priceWithTraining', 'priceWithoutTraining', 'price'];
-
-                                                let foundVariant = false;
-                                                variants.forEach(variant => {
-                                                    if (value[variant] !== undefined && value[variant] !== null && value[variant] !== "") {
-                                                        foundVariant = true;
-                                                        options.push(
-                                                            <option key={`${key}|${variant}`} value={`${key}|${variant}`}>
-                                                                {planName} ({getVariantLabel(variant)}) - ₹{value[variant]}
-                                                            </option>
-                                                        );
-                                                    }
-                                                });
-
-                                                // If no specific price variants found but object exists (shouldn't happen with correct data but just in case)
-                                                if (!foundVariant) {
-                                                    // Skip or show error?
-                                                }
-                                            });
-
-                                            return options.length > 0 ? options : <option value="">No plans available</option>;
+                                            return availablePlans.length > 0 ? (
+                                                availablePlans.map(([key, value]) => (
+                                                    <option key={key} value={key}>
+                                                        {value.title || key} - ₹{targetUser?.gender === 'Male' ? value.price : value.price}
+                                                    </option>
+                                                ))
+                                            ) : (
+                                                <option value="">No plans available for this facility</option>
+                                            );
                                         })()}
                                     </select>
                                 )}
@@ -529,19 +466,7 @@ const SubscriptionExtensionModal = ({
                                     <input type="checkbox" name="includeRegistration" id="includeReg" checked={extensionFormData.includeRegistration} onChange={handleExtensionInputChange} className="h-4 w-4 text-blue-600 rounded border-gray-300" />
                                     <label htmlFor="includeReg" className="ml-2 block text-sm text-gray-900">
                                         Include Registration Fee
-                                        <span className="font-semibold text-blue-700 ml-1">
-                                            (+₹{
-                                                (() => {
-                                                    const regData = selectedFacilityFees['registration'];
-                                                    const variant = extensionFormData.priceVariant;
-                                                    if (regData[variant] !== undefined) return regData[variant];
-                                                    // Fallback logic
-                                                    if (regData.price !== undefined) return regData.price;
-                                                    if (regData.priceMale !== undefined) return regData.priceMale;
-                                                    return 0;
-                                                })()
-                                            })
-                                        </span>
+                                        <span className="font-semibold text-blue-700 ml-1">(+₹{targetUser?.gender === 'Male' ? selectedFacilityFees['registration'].price : selectedFacilityFees['registration'].price})</span>
                                     </label>
                                 </div>
                             )}

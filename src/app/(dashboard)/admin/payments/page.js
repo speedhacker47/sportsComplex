@@ -15,6 +15,7 @@ import {
   where
 } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
+import ManualPaymentModal from './ManualPaymentModal'; // Add this line
 
 const formatTimestamp = (timestamp) => {
   if (!timestamp) return 'N/A';
@@ -26,13 +27,6 @@ const formatTimestamp = (timestamp) => {
     hour: '2-digit',
     minute: '2-digit'
   });
-};
-
-// Generate Invoice Number based on payment index
-const generateInvoiceNumber = (paymentIndex, paymentDate) => {
-  const month = paymentDate ? paymentDate.toDate().getMonth() : new Date().getMonth();
-  const paddedIndex = String(paymentIndex + 1).padStart(4, '0');
-  return `INV-${month}-${paddedIndex}`;
 };
 
 // Print Receipt Function
@@ -47,7 +41,7 @@ const printReceipt = (payment) => {
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Payment Receipt - ${payment.invoiceNo || payment.invoiceNumber}</title>
+  <title>Payment Receipt - ${payment.invoiceNo || payment.invoiceNumber || payment.id}</title>
   <style>
     @page {
       size: A5;
@@ -226,7 +220,7 @@ const printReceipt = (payment) => {
       </div>
       <div style="text-align: right;">
         <div class="receipt-badge">RECEIPT</div>
-        <div style="font-size: 9px; margin-top: 2px; color: #666;">${payment.invoiceNo || payment.invoiceNumber}</div>
+        <div style="font-size: 9px; margin-top: 2px; color: #666;">${payment.invoiceNo || payment.invoiceNumber || ''}</div>
       </div>
     </div>
 
@@ -367,6 +361,15 @@ const EditPaymentModal = ({ isOpen, onClose, payment, onSave, loading }) => {
     }));
   };
 
+  // ADDED: Function to toggle Registration
+  const toggleRegistration = () => {
+    if (formData.months.includes('Registration')) {
+      setFormData(prev => ({ ...prev, months: prev.months.filter(m => m !== 'Registration') }));
+    } else {
+      setFormData(prev => ({ ...prev, months: ['Registration', ...prev.months] }));
+    }
+  };
+
   const addMonth = () => {
     const monthName = new Date(addYearVal, addMonthVal).toLocaleString('default', { month: 'long' });
     const newMonthStr = `${monthName} ${addYearVal}`;
@@ -441,12 +444,12 @@ const EditPaymentModal = ({ isOpen, onClose, payment, onSave, loading }) => {
           </div>
 
           <div className="border p-3 rounded-lg bg-gray-50">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Edit Months</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Edit Months & Registration</label>
 
             <div className="flex flex-wrap gap-2 mb-3">
               {formData.months.length > 0 ? (
                 formData.months.map((m, idx) => (
-                  <span key={idx} className="bg-white border border-blue-200 text-blue-700 px-2 py-1 rounded text-xs flex items-center gap-1 shadow-sm">
+                  <span key={idx} className={`border px-2 py-1 rounded text-xs flex items-center gap-1 shadow-sm ${m === 'Registration' ? 'bg-purple-100 text-purple-800 border-purple-200' : 'bg-white text-blue-700 border-blue-200'}`}>
                     {m}
                     <button type="button" onClick={() => removeMonth(idx)} className="text-red-500 hover:text-red-700">
                       <X size={12} />
@@ -458,31 +461,49 @@ const EditPaymentModal = ({ isOpen, onClose, payment, onSave, loading }) => {
               )}
             </div>
 
-            <div className="flex gap-2">
-              <select
-                value={addMonthVal}
-                onChange={(e) => setAddMonthVal(e.target.value)}
-                className="w-1/3 px-2 py-1 text-sm border border-gray-300 rounded"
-              >
-                {Array.from({ length: 12 }, (_, i) => (
-                  <option key={i} value={i}>{new Date(0, i).toLocaleString('default', { month: 'short' })}</option>
-                ))}
-              </select>
-              <select
-                value={addYearVal}
-                onChange={(e) => setAddYearVal(e.target.value)}
-                className="w-1/3 px-2 py-1 text-sm border border-gray-300 rounded"
-              >
-                {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 1 + i).map(y => (
-                  <option key={y} value={y}>{y}</option>
-                ))}
-              </select>
+            <div className="flex flex-col gap-2">
+              <div className="flex gap-2">
+                <select
+                  value={addMonthVal}
+                  onChange={(e) => setAddMonthVal(e.target.value)}
+                  className="w-1/3 px-2 py-1 text-sm border border-gray-300 rounded"
+                >
+                  {Array.from({ length: 12 }, (_, i) => (
+                    <option key={i} value={i}>{new Date(0, i).toLocaleString('default', { month: 'short' })}</option>
+                  ))}
+                </select>
+                <select
+                  value={addYearVal}
+                  onChange={(e) => setAddYearVal(e.target.value)}
+                  className="w-1/3 px-2 py-1 text-sm border border-gray-300 rounded"
+                >
+                  {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 1 + i).map(y => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={addMonth}
+                  className="flex-1 bg-green-500 text-white rounded text-sm hover:bg-green-600 flex justify-center items-center"
+                >
+                  <Plus size={16} /> Add Month
+                </button>
+              </div>
+
+              {/* NEW REGISTRATION TOGGLE BUTTON */}
               <button
                 type="button"
-                onClick={addMonth}
-                className="flex-1 bg-green-500 text-white rounded text-sm hover:bg-green-600 flex justify-center items-center"
+                onClick={toggleRegistration}
+                className={`w-full py-1 text-sm rounded border flex justify-center items-center gap-2 transition-colors ${formData.months.includes('Registration')
+                  ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'
+                  : 'bg-purple-50 text-purple-600 border-purple-200 hover:bg-purple-100'
+                  }`}
               >
-                <Plus size={16} /> Add
+                {formData.months.includes('Registration') ? (
+                  <><X size={14} /> Remove Registration Badge</>
+                ) : (
+                  <><Plus size={14} /> Add Registration Badge</>
+                )}
               </button>
             </div>
           </div>
@@ -555,8 +576,8 @@ const PaymentDetailsModal = ({ isOpen, onClose, payment, user, facility, subscri
             <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
               <p className="text-sm font-medium text-gray-600">Status</p>
               <span className={`px-3 py-1 text-sm font-semibold rounded-full ${payment.status === 'Success' || payment.status === 'completed' ? 'bg-green-100 text-green-800' :
-                  payment.status === 'Failed' || payment.status === 'failed' ? 'bg-red-100 text-red-800' :
-                    'bg-yellow-100 text-yellow-800'
+                payment.status === 'Failed' || payment.status === 'failed' ? 'bg-red-100 text-red-800' :
+                  'bg-yellow-100 text-yellow-800'
                 }`}>
                 {payment.status === 'completed' ? 'Completed' : payment.status}
               </span>
@@ -658,6 +679,65 @@ const PaymentsPage = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingPayment, setEditingPayment] = useState(null);
 
+  // --- ADD THIS LINE ---
+  const [showManualModal, setShowManualModal] = useState(false);
+
+  const [exportDropdown, setExportDropdown] = useState(null); // 'pdf' or 'excel' or null
+
+  // HELPER: Fetch Academy Data for Mixed Reports
+  const fetchAcademyDataForExport = async () => {
+    const monthName = new Date(fetchYear, fetchMonth).toLocaleString('default', { month: 'long' });
+    const targetBadge = `${monthName} ${fetchYear}`;
+
+    // 1. Fetch Academy Names
+    const academiesRef = collection(db, 'academies');
+    const academiesSnap = await getDocs(academiesRef);
+    const academyMap = {};
+    academiesSnap.forEach(doc => { academyMap[doc.id] = doc.data().name; });
+
+    // 2. Fetch Payments
+    const startOfMonth = new Date(fetchYear, fetchMonth, 1);
+    const endOfMonth = new Date(fetchYear, fetchMonth + 1, 0, 23, 59, 59);
+
+    const q = query(
+      collection(db, 'academyPayments'),
+      where('paymentDate', '>=', Timestamp.fromDate(startOfMonth)),
+      where('paymentDate', '<=', Timestamp.fromDate(endOfMonth))
+    );
+    const snap = await getDocs(q);
+
+    const academyPayments = await Promise.all(snap.docs.map(async (docSnap) => {
+      const data = docSnap.data();
+      let userName = 'Unknown';
+      let mobile = '';
+
+      // Minimal User Fetch for Report
+      if (data.userId) {
+        // (Simplified logic for export speed - assuming direct ID match or guest)
+        // In production, you might want to reuse the detailed fetch logic or cache it
+        if (typeof data.userId === 'string') {
+          // quick attempt
+          const u = await getDoc(doc(db, 'users', data.userId));
+          if (u.exists()) { userName = u.data().name; mobile = u.data().mobile; }
+          else {
+            const g = await getDoc(doc(db, 'guests', data.userId));
+            if (g.exists()) { userName = g.data().name; mobile = g.data().mobile; }
+          }
+        }
+      }
+
+      return {
+        ...data,
+        id: docSnap.id,
+        type: 'Academy',
+        itemName: academyMap[data.academyId] || 'Academy',
+        period: data.months,
+        user: { name: userName, mobile: mobile }
+      };
+    }));
+    return academyPayments;
+  };
+
   useEffect(() => {
     loadPayments();
   }, [fetchMonth, fetchYear]); // Reload when month/year changes
@@ -665,18 +745,23 @@ const PaymentsPage = () => {
   const loadPayments = async () => {
     setDataLoading(true);
     try {
-      // Calculate start and end of selected month
-      const startOfMonth = new Date(fetchYear, fetchMonth, 1);
-      const endOfMonth = new Date(fetchYear, fetchMonth + 1, 0, 23, 59, 59, 999);
+      // --- CHANGED LOGIC START ---
+      // 1. Create the target badge string based on selected dropdowns
+      const monthName = new Date(fetchYear, fetchMonth).toLocaleString('default', { month: 'long' });
+      const targetBadge = `${monthName} ${fetchYear}`;
+      // --- CHANGED LOGIC END ---
 
       const paymentsRef = collection(db, 'payments');
 
-      // Query with date range to limit documents fetched
+      // --- UPDATED QUERY ---
+      // Use date range instead of string array for reliability
+      const startOfMonth = new Date(fetchYear, fetchMonth, 1);
+      const endOfMonth = new Date(fetchYear, fetchMonth + 1, 0, 23, 59, 59);
+
       const q = query(
         paymentsRef,
         where('paymentDate', '>=', Timestamp.fromDate(startOfMonth)),
-        where('paymentDate', '<=', Timestamp.fromDate(endOfMonth)),
-        orderBy('paymentDate', 'desc')
+        where('paymentDate', '<=', Timestamp.fromDate(endOfMonth))
       );
 
       const paymentsSnap = await getDocs(q);
@@ -689,6 +774,7 @@ const PaymentsPage = () => {
           let facilityData = null;
           let subscriptionData = null;
 
+          // Fetch User Details
           if (payment.userId) {
             if (typeof payment.userId.get === 'function') {
               const userDoc = await getDoc(payment.userId);
@@ -716,6 +802,7 @@ const PaymentsPage = () => {
             }
           }
 
+          // Fetch Facility Details
           if (payment.facilityId && typeof payment.facilityId.get === 'function') {
             const facilityDoc = await getDoc(payment.facilityId);
             if (facilityDoc.exists()) {
@@ -728,6 +815,7 @@ const PaymentsPage = () => {
             }
           }
 
+          // Fetch Subscription Details
           if (payment.subscriptionId && typeof payment.subscriptionId.get === 'function') {
             const subscriptionDoc = await getDoc(payment.subscriptionId);
             if (subscriptionDoc.exists()) {
@@ -756,8 +844,17 @@ const PaymentsPage = () => {
         })
       );
 
+      // --- ADDED SORTING ---
+      // Sort client-side by paymentDate descending (newest first)
+      paymentsData.sort((a, b) => {
+        const dateA = a.paymentDate ? a.paymentDate.toMillis() : 0;
+        const dateB = b.paymentDate ? b.paymentDate.toMillis() : 0;
+        return dateB - dateA;
+      });
+
       setPayments(paymentsData);
 
+      // Update filter options
       const uniqueFacilities = [...new Set(paymentsData
         .map(p => p.facility?.name || p.facilityId)
         .filter(Boolean))];
@@ -921,28 +1018,75 @@ const PaymentsPage = () => {
   };
 
 
-  const exportToPDF = () => {
+  const exportToPDF = async (scope) => {
     setExportLoading(true);
+    setExportDropdown(null);
     try {
       const monthName = new Date(fetchYear, fetchMonth).toLocaleString('default', { month: 'long' });
-      const facilitySummary = getFacilitySummary(); // Calculate summary data
 
-      const printWindow = window.open('', '_blank');
+      let dataToExport = [];
 
-      const paymentsToExport = [...filteredPayments].sort((a, b) => a.paymentDate - b.paymentDate);
-      // Generate Rows for Main Table
-      const paymentRows = paymentsToExport.map((payment, index) => `
+      // 1. Prepare Facility Data (Current Page)
+      const facilityData = filteredPayments.map(p => ({
+        ...p,
+        type: 'Facility',
+        itemName: p.facility?.name || p.facilityId || 'Unknown Facility',
+        period: p.month
+      }));
+
+      // 2. Determine Scope and Fetch Data
+      if (scope === 'facility') {
+        dataToExport = facilityData;
+      } else if (scope === 'academy') {
+        dataToExport = await fetchAcademyDataForExport();
+      } else {
+        const academyData = await fetchAcademyDataForExport();
+        dataToExport = [...facilityData, ...academyData];
+      }
+
+      // Sort by date
+      dataToExport.sort((a, b) => (b.paymentDate?.toMillis() || 0) - (a.paymentDate?.toMillis() || 0));
+
+      // 3. Calculate Summary
+      const summaryMap = {};
+      let grandTotal = 0;
+      let totalCount = 0;
+
+      dataToExport.forEach(p => {
+        const key = `${p.itemName}__${p.type}`; // Unique key combining name and type
+        if (!summaryMap[key]) {
+          summaryMap[key] = { name: p.itemName, type: p.type, count: 0, total: 0 };
+        }
+        summaryMap[key].count += 1;
+        const amt = Number(p.amount) || 0;
+        summaryMap[key].total += amt;
+        grandTotal += amt;
+        totalCount += 1;
+      });
+
+      // Generate Summary HTML Rows
+      const summaryRows = Object.values(summaryMap).sort((a, b) => a.type.localeCompare(b.type) || a.name.localeCompare(b.name)).map(item => `
+        <tr>
+          <td>${item.name}</td>
+          <td>${item.type}</td>
+          <td style="text-align: center;">${item.count}</td>
+          <td style="text-align: right;">₹${item.total.toLocaleString()}</td>
+        </tr>
+      `).join('');
+
+      // Generate Detail HTML Rows
+      const detailRows = dataToExport.map((payment, index) => `
         <tr class="${index % 2 === 0 ? 'even' : 'odd'}">
           <td>
             <div class="txn-id">${payment.transactionId || payment.id || '-'}</div>
-            <div class="invoice-no">${payment.invoiceNo || payment.invoiceNumber || ''}</div>
+            <div style="font-size:9px; color:#666">${payment.type}</div>
           </td>
           <td>
             <div class="user-name">${payment.user?.name || '-'}</div>
             <div class="sub-text">${payment.user?.mobile || ''}</div>
           </td>
-          <td>${payment.facility?.name || payment.facilityId || '-'}</td>
-          <td>${payment.month && payment.month.length > 0 ? payment.month.join(', ') : '-'}</td>
+          <td>${payment.itemName}</td>
+          <td>${payment.period && payment.period.length > 0 ? payment.period.join(', ') : '-'}</td>
           <td class="amount">₹${payment.amount || 0}</td>
           <td>${payment.method || '-'}</td>
           <td>${formatTimestamp(payment.paymentDate)}</td>
@@ -956,127 +1100,58 @@ const PaymentsPage = () => {
         </tr>
       `).join('');
 
-      // Generate Rows for Summary Table
-      const summaryRows = Object.entries(facilitySummary).map(([facility, data]) => `
-        <tr>
-          <td>${facility}</td>
-          <td style="text-align: center;">${data.count}</td>
-          <td style="text-align: right;">₹${data.total.toLocaleString()}</td>
-        </tr>
-      `).join('') + `
-    <tr style="font-weight: bold; background-color: #f1f5f9; border-top: 2px solid #64748b;">
-      <td style="padding: 8px;">GRAND TOTAL</td>
-      <td style="text-align: center; padding: 8px;">${filteredStats.total}</td>
-      <td style="text-align: right; padding: 8px;">₹${filteredStats.totalAmount.toLocaleString()}</td>
-    </tr>
-  `;
-
       const htmlContent = `
         <!DOCTYPE html>
         <html>
         <head>
-          <title>Payment Report - ${monthName} ${fetchYear}</title>
+          <title>Payment Report - ${scope.toUpperCase()}</title>
           <style>
-            @page { size: A4 landscape; margin: 10mm; }
-            body { font-family: 'Helvetica', 'Arial', sans-serif; color: #333; margin: 0; padding: 0; font-size: 11px; }
-            .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #2563eb; padding-bottom: 15px; margin-bottom: 20px; }
-            .logo-section { display: flex; align-items: center; gap: 15px; }
-            .logo-box { width: 50px; height: 50px; border: 1px solid #2563eb; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
-            .org-name { font-size: 18px; font-weight: bold; color: #1e40af; text-transform: uppercase; }
-            .reg-text { font-size: 10px; color: #64748b; }
-            .report-title { text-align: right; }
-            .title-main { font-size: 16px; font-weight: bold; }
-            .generated-date { font-size: 10px; color: #666; margin-top: 4px; }
-            
-            /* Stats Cards */
-            .stats-container { display: flex; gap: 15px; margin-bottom: 20px; }
-            .stat-card { border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 15px; flex: 1; background: #f8fafc; }
-            .stat-label { font-size: 10px; color: #64748b; text-transform: uppercase; font-weight: bold; }
-            .stat-value { font-size: 16px; font-weight: bold; margin-top: 4px; color: #0f172a; }
-            .stat-value.green { color: #166534; }
-            .stat-value.red { color: #991b1b; }
-            .stat-value.blue { color: #1e40af; }
-
-            /* Tables */
-            table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-            th { background-color: #2563eb; color: white; text-align: left; padding: 8px; font-size: 10px; text-transform: uppercase; }
-            td { border-bottom: 1px solid #e2e8f0; padding: 6px 8px; vertical-align: middle; }
-            tr.even { background-color: #f8fafc; }
-            
-            /* Specific Column Styles */
-            .txn-id { font-weight: bold; color: #333; }
-            .invoice-no { font-size: 9px; color: #666; }
-            .user-name { font-weight: 600; }
-            .sub-text { font-size: 9px; color: #666; }
-            .amount { font-weight: bold; color: #1e40af; }
-            
-            /* Status Badges */
-            .status-badge { padding: 3px 6px; border-radius: 4px; font-size: 9px; font-weight: bold; text-transform: uppercase; }
-            .status-badge.success { background: #dcfce7; color: #166534; }
-            .status-badge.failed { background: #fee2e2; color: #991b1b; }
-            .status-badge.pending { background: #fef9c3; color: #854d0e; }
-
-            .section-header { font-size: 12px; font-weight: bold; margin-bottom: 10px; color: #475569; border-left: 3px solid #2563eb; padding-left: 8px; }
-            
-            /* Signature Section Styles */
-            .signature-section { display: flex; justify-content: space-between; margin-top: 60px; padding: 0 50px; page-break-inside: avoid; }
-            .sign-box { text-align: center; width: 200px; }
-            .sign-line { border-bottom: 1px solid #333; height: 30px; margin-bottom: 5px; }
-            .sign-title { font-weight: bold; font-size: 11px; color: #1e40af; }
-            
-            .footer { margin-top: 30px; text-align: center; font-size: 9px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 10px; }
-            
-            @media print {
-              .no-print { display: none; }
-              body { -webkit-print-color-adjust: exact; }
-            }
+             @page { size: A4 landscape; margin: 10mm; }
+             body { font-family: 'Helvetica', 'Arial', sans-serif; color: #333; margin: 0; padding: 0; font-size: 11px; }
+             h2 { color:#1e40af; border-bottom: 2px solid #2563eb; padding-bottom:10px; }
+             .section-title { font-size: 14px; font-weight: bold; margin-top: 20px; margin-bottom: 10px; color: #475569; }
+             table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+             th { background-color: #2563eb; color: white; text-align: left; padding: 8px; font-size: 10px; text-transform: uppercase; }
+             td { border-bottom: 1px solid #e2e8f0; padding: 6px 8px; vertical-align: middle; }
+             tr.even { background-color: #f8fafc; }
+             .status-badge { padding: 3px 6px; border-radius: 4px; font-size: 9px; font-weight: bold; text-transform: uppercase; }
+             .status-badge.success { background: #dcfce7; color: #166534; }
+             .status-badge.failed { background: #fee2e2; color: #991b1b; }
+             .status-badge.pending { background: #fef9c3; color: #854d0e; }
+             .amount { font-weight: bold; color: #1e40af; }
+             .summary-table th { background-color: #166534; }
           </style>
         </head>
         <body>
-          <div class="header">
-            <div class="logo-section">
-              <div class="logo-box">
-                <img src="/raigarh_logo.webp" alt="Logo" style="width:100%; height:100%; object-fit:contain;" />
-              </div>
-              <div>
-                <div class="org-name">Raigarh Stadium Samiti</div>
-                <div class="reg-text">Reg: बि.सं. 1737 / 21.04.1997</div>
-              </div>
-            </div>
-            <div class="report-title">
-              <div class="title-main">Payment Report - ${monthName} ${fetchYear}</div>
-              <div class="generated-date">Generated: ${new Date().toLocaleString('en-GB')}</div>
-            </div>
-          </div>
+          <h2>${scope.toUpperCase()} PAYMENT REPORT - ${monthName} ${fetchYear}</h2>
+          
+          <div class="section-title">Summary Breakdown</div>
+          <table class="summary-table" style="width: 70%;">
+            <thead>
+              <tr>
+                <th>Item Name</th>
+                <th>Category</th>
+                <th style="text-align: center;">Count</th>
+                <th style="text-align: right;">Total Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${summaryRows}
+              <tr style="font-weight: bold; background-color: #e2e8f0; border-top: 2px solid #333;">
+                <td colspan="2">GRAND TOTAL</td>
+                <td style="text-align: center;">${totalCount}</td>
+                <td style="text-align: right;">₹${grandTotal.toLocaleString()}</td>
+              </tr>
+            </tbody>
+          </table>
 
-          <!-- Summary Stats -->
-          <div class="stats-container">
-            <div class="stat-card">
-              <div class="stat-label">Total Txns</div>
-              <div class="stat-value">${filteredStats.total}</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-label">Successful</div>
-              <div class="stat-value green">${filteredStats.successful}</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-label">Failed</div>
-              <div class="stat-value red">${filteredStats.failed}</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-label">Total Amount</div>
-              <div class="stat-value blue">₹${filteredStats.totalAmount.toLocaleString()}</div>
-            </div>
-          </div>
-
-          <!-- Main Data Table -->
-          <div class="section-header">Detailed Transactions</div>
+          <div class="section-title" style="page-break-before: always;">Detailed Transactions</div>
           <table>
             <thead>
               <tr>
-                <th width="15%">Transaction Details</th>
+                <th width="15%">Txn ID</th>
                 <th width="15%">User</th>
-                <th width="15%">Facility</th>
+                <th width="15%">Item</th>
                 <th width="15%">Months</th>
                 <th width="10%">Amount</th>
                 <th width="10%">Method</th>
@@ -1084,142 +1159,110 @@ const PaymentsPage = () => {
                 <th width="10%">Status</th>
               </tr>
             </thead>
-            <tbody>
-              ${paymentRows}
-            </tbody>
+            <tbody>${detailRows}</tbody>
           </table>
-
-          <!-- Facility Summary Table -->
-          <div style="page-break-inside: avoid;">
-            <div class="section-header">Summary by Facility / Game</div>
-            <table style="width: 60%;">
-              <thead>
-                <tr>
-                  <th style="background-color: #166534;">Facility Name</th>
-                  <th style="background-color: #166534; text-align: center;">Count</th>
-                  <th style="background-color: #166534; text-align: right;">Total Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${summaryRows}
-              </tbody>
-            </table>
-          </div>
-
-          <!-- Signature Section -->
-          <div class="signature-section">
-            <div class="sign-box">
-              <div class="sign-line"></div>
-              <div class="sign-title">Assistant Grade </div>
-            </div>
-            <div class="sign-box">
-              <div class="sign-line"></div>
-              <div class="sign-title">Stadium Incharge</div>
-            </div>
-            <div class="sign-box">
-              <div class="sign-line"></div>
-              <div class="sign-title">Secretary</div>
-            </div>
-          </div>
-
-          <div class="footer">
-            Report - Raigarh Stadium Samiti 
-          </div>
-
-          <script>
-            window.onload = function() {
-              window.print();
-              // window.onafterprint = function() { window.close(); };
-            };
-          </script>
+          <script>window.onload = function() { window.print(); };</script>
         </body>
         </html>
       `;
 
+      const printWindow = window.open('', '_blank');
       printWindow.document.write(htmlContent);
-      printWindow.document.close(); // Important for styles to load
-
-      setAlert({ show: true, type: 'success', message: 'Print window opened successfully!' });
+      printWindow.document.close();
     } catch (error) {
-      console.error('Error generating report:', error);
-      setAlert({ show: true, type: 'error', message: 'Failed to generate report' });
+      console.error('Error generating PDF:', error);
+      setAlert({ show: true, type: 'error', message: 'Failed to generate PDF' });
     } finally {
       setExportLoading(false);
     }
   };
 
   // Export to Excel
-  const exportToExcel = () => {
+  const exportToExcel = async (scope) => {
     setExportLoading(true);
+    setExportDropdown(null);
     try {
       const monthName = new Date(fetchYear, fetchMonth).toLocaleString('default', { month: 'long' });
 
-      // Prepare data for main sheet
-      const excelData = filteredPayments.map(payment => ({
-        'Transaction ID': payment.transactionId || payment.id || '',
-        'Invoice No': payment.invoiceNo || payment.invoiceNumber || '',
-        'User Name': payment.user?.name || '',
-        'User Mobile': payment.user?.mobile || '',
-        'Reg No': payment.user?.isGuest ? 'GUEST' : (payment.user?.regNumber || ''),
-        'Facility': payment.facility?.name || payment.facilityId || '',
-        'Months': payment.month && payment.month.length > 0 ? payment.month.join(', ') : '',
-        'Amount (₹)': payment.amount || 0,
-        'Method': payment.method || '',
-        'Payment Date': formatTimestamp(payment.paymentDate),
-        'Status': payment.status || '',
-        'Plan Type': payment.subscription?.planType || payment.planType || ''
+      let dataToExport = [];
+
+      const facilityData = filteredPayments.map(p => ({
+        ...p,
+        type: 'Facility',
+        itemName: p.facility?.name || p.facilityId || 'Unknown',
+        period: p.month
       }));
 
-      // Prepare summary data
-      const facilitySummary = getFacilitySummary();
-      const summaryData = Object.entries(facilitySummary).map(([facility, data]) => ({
-        'Facility/Game': facility,
-        'Payment Count': data.count,
-        'Total Amount (₹)': data.total
+      if (scope === 'facility') {
+        dataToExport = facilityData;
+      } else if (scope === 'academy') {
+        dataToExport = await fetchAcademyDataForExport();
+      } else {
+        const academyData = await fetchAcademyDataForExport();
+        dataToExport = [...facilityData, ...academyData];
+      }
+
+      // 1. Prepare Detail Sheet Data
+      const detailData = dataToExport.map(p => ({
+        'Category': p.type,
+        'Item Name': p.itemName,
+        'Transaction ID': p.transactionId || p.id || '',
+        'User Name': p.user?.name || '',
+        'User Mobile': p.user?.mobile || '',
+        'Months': p.period && p.period.length > 0 ? p.period.join(', ') : '',
+        'Amount (₹)': p.amount || 0,
+        'Method': p.method || '',
+        'Payment Date': formatTimestamp(p.paymentDate),
+        'Status': p.status || ''
       }));
 
-      // Add overall summary
-      summaryData.push({
-        'Facility/Game': 'GRAND TOTAL',
-        'Payment Count': filteredStats.total,
-        'Total Amount (₹)': filteredStats.totalAmount
+      // 2. Prepare Summary Sheet Data
+      const summaryMap = {};
+      let grandTotal = 0;
+      let totalCount = 0;
+
+      dataToExport.forEach(p => {
+        const key = `${p.itemName}__${p.type}`;
+        if (!summaryMap[key]) {
+          summaryMap[key] = { name: p.itemName, type: p.type, count: 0, total: 0 };
+        }
+        summaryMap[key].count += 1;
+        const amt = Number(p.amount) || 0;
+        summaryMap[key].total += amt;
+        grandTotal += amt;
+        totalCount += 1;
       });
 
-      // Create workbook
+      const summaryData = Object.values(summaryMap)
+        .sort((a, b) => a.type.localeCompare(b.type) || a.name.localeCompare(b.name))
+        .map(item => ({
+          'Item Name': item.name,
+          'Category': item.type,
+          'Count': item.count,
+          'Total Amount (₹)': item.total
+        }));
+
+      // Append Grand Total Row
+      summaryData.push({
+        'Item Name': 'GRAND TOTAL',
+        'Category': '',
+        'Count': totalCount,
+        'Total Amount (₹)': grandTotal
+      });
+
+      // Create Workbook
       const wb = XLSX.utils.book_new();
 
-      // Main data sheet
-      const ws1 = XLSX.utils.json_to_sheet(excelData);
+      // Add Sheets
+      const wsDetail = XLSX.utils.json_to_sheet(detailData);
+      wsDetail['!cols'] = [{ wch: 10 }, { wch: 25 }, { wch: 25 }, { wch: 20 }, { wch: 15 }, { wch: 25 }, { wch: 12 }, { wch: 15 }, { wch: 20 }, { wch: 12 }];
+      XLSX.utils.book_append_sheet(wb, wsDetail, 'Transactions');
 
-      // Set column widths
-      ws1['!cols'] = [
-        { wch: 25 }, // Transaction ID
-        { wch: 20 }, // Invoice No
-        { wch: 25 }, // User Name
-        { wch: 15 }, // Mobile
-        { wch: 15 }, // Reg No
-        { wch: 25 }, // Facility
-        { wch: 30 }, // Months
-        { wch: 12 }, // Amount
-        { wch: 15 }, // Method
-        { wch: 20 }, // Date
-        { wch: 12 }, // Status
-        { wch: 15 }  // Plan Type
-      ];
+      const wsSummary = XLSX.utils.json_to_sheet(summaryData);
+      wsSummary['!cols'] = [{ wch: 30 }, { wch: 15 }, { wch: 10 }, { wch: 20 }];
+      XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
 
-      XLSX.utils.book_append_sheet(wb, ws1, 'Payments');
-
-      // Summary sheet
-      const ws2 = XLSX.utils.json_to_sheet(summaryData);
-      ws2['!cols'] = [
-        { wch: 30 },
-        { wch: 15 },
-        { wch: 20 }
-      ];
-      XLSX.utils.book_append_sheet(wb, ws2, 'Summary');
-
-      // Write file
-      XLSX.writeFile(wb, `Payment_Report_${monthName}_${fetchYear}.xlsx`);
+      XLSX.writeFile(wb, `${scope}_Report_${monthName}_${fetchYear}.xlsx`);
       setAlert({ show: true, type: 'success', message: 'Excel exported successfully!' });
     } catch (error) {
       console.error('Error exporting Excel:', error);
@@ -1345,22 +1388,53 @@ const PaymentsPage = () => {
 
           {/* Export Buttons */}
           <div className="flex gap-2 ml-4">
+            {/* PDF Export Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setExportDropdown(exportDropdown === 'pdf' ? null : 'pdf')}
+                disabled={exportLoading}
+                className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 text-sm"
+              >
+                <FileDown size={16} /> {exportLoading ? '...' : 'Export PDF'}
+              </button>
+              {exportDropdown === 'pdf' && (
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-50 border border-gray-200">
+                  <div className="py-1">
+                    <button onClick={() => exportToPDF('facility')} className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Only Facility</button>
+                    <button onClick={() => exportToPDF('academy')} className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Only Academy</button>
+                    <button onClick={() => exportToPDF('combined')} className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Both Combined</button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <button
-              onClick={exportToPDF}
-              disabled={exportLoading || filteredPayments.length === 0}
-              className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+              onClick={() => setShowManualModal(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm ml-2"
             >
-              <FileDown size={16} />
-              {exportLoading ? 'Exporting...' : 'Export PDF'}
+              <Plus size={16} />
+              Add Payment
             </button>
-            <button
-              onClick={exportToExcel}
-              disabled={exportLoading || filteredPayments.length === 0}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-            >
-              <Download size={16} />
-              {exportLoading ? 'Exporting...' : 'Export Excel'}
-            </button>
+
+            {/* Excel Export Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setExportDropdown(exportDropdown === 'excel' ? null : 'excel')}
+                disabled={exportLoading}
+                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 text-sm"
+              >
+                <Download size={16} /> {exportLoading ? '...' : 'Export Excel'}
+              </button>
+              {exportDropdown === 'excel' && (
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-50 border border-gray-200">
+                  <div className="py-1">
+                    <button onClick={() => exportToExcel('facility')} className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Only Facility</button>
+                    <button onClick={() => exportToExcel('academy')} className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Only Academy</button>
+                    <button onClick={() => exportToExcel('combined')} className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Both Combined</button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -1507,7 +1581,7 @@ const PaymentsPage = () => {
                         {payment.month && payment.month.length > 0 ? (
                           <div className="flex flex-wrap gap-1 max-w-[200px]">
                             {payment.month.map((m, i) => (
-                              <span key={i} className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-[10px] border border-gray-200 whitespace-nowrap">
+                              <span key={i} className={`px-1.5 py-0.5 rounded text-[10px] border whitespace-nowrap ${m === 'Registration' ? 'bg-purple-100 text-purple-800 border-purple-200' : 'bg-gray-100 text-gray-600 border-gray-200'}`}>
                                 {m}
                               </span>
                             ))}
@@ -1528,8 +1602,8 @@ const PaymentsPage = () => {
                       <td className="px-2 py-4 text-xs text-gray-600">{formatTimestamp(payment.paymentDate)}</td>
                       <td className="px-2 py-4">
                         <span className={`px-2 py-1 text-[10px] font-semibold rounded-full ${payment.status === 'Success' || payment.status === 'completed' ? 'bg-green-100 text-green-800' :
-                            payment.status === 'Failed' || payment.status === 'failed' ? 'bg-red-100 text-red-800' :
-                              'bg-yellow-100 text-yellow-800'
+                          payment.status === 'Failed' || payment.status === 'failed' ? 'bg-red-100 text-red-800' :
+                            'bg-yellow-100 text-yellow-800'
                           }`}>
                           {payment.status === 'completed' ? 'Completed' : payment.status}
                         </span>
@@ -1618,6 +1692,15 @@ const PaymentsPage = () => {
         payment={editingPayment}
         onSave={handleSavePayment}
         loading={!!actionLoading}
+      />
+
+      <ManualPaymentModal
+        isOpen={showManualModal}
+        onClose={() => setShowManualModal(false)}
+        onPaymentAdded={() => {
+          loadPayments(); // Refresh list after adding
+          setAlert({ show: true, type: 'success', message: 'Payment added successfully' });
+        }}
       />
     </div>
   );

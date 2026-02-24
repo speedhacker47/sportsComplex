@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
 import { User, Users, Calendar, AlertCircle, CheckCircle, X, Edit, RefreshCcw, QrCode, Trash2, Upload, Loader2, AlertTriangle, FileDown, Download } from 'lucide-react';
-import { db, storage } from '../../../lib/firebase.js'; 
+import { db, storage } from '../../../lib/firebase.js';
 import {
   collection, addDoc, getDocs, doc, query, orderBy, Timestamp, getDoc, updateDoc, where, limit, deleteDoc, runTransaction
 } from 'firebase/firestore';
@@ -14,7 +14,7 @@ import * as XLSX from 'xlsx'; // Added for Excel Export
 
 const UserRegistrationPage = () => {
   const { user: staffUser, loading: authLoading, isAdmin } = useAuth();
-  
+
   // Existing State
   const [facilities, setFacilities] = useState([]);
   const [facilitiesMap, setFacilitiesMap] = useState(new Map());
@@ -26,11 +26,11 @@ const UserRegistrationPage = () => {
   const [dataLoading, setDataLoading] = useState(true);
   const [alert, setAlert] = useState({ show: false, type: '', message: '' });
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedFacilityFilter, setSelectedFacilityFilter] = useState(''); 
-  const [filterExpiryStatus, setFilterExpiryStatus] = useState('all'); 
-  const [filterAgeCategory, setFilterAgeCategory] = useState('all'); 
+  const [selectedFacilityFilter, setSelectedFacilityFilter] = useState('');
+  const [filterExpiryStatus, setFilterExpiryStatus] = useState('all');
+  const [filterAgeCategory, setFilterAgeCategory] = useState('all');
   const [filterGender, setFilterGender] = useState('all');
-  
+
   // Export State
   const [exportLoading, setExportLoading] = useState(false);
 
@@ -46,7 +46,7 @@ const UserRegistrationPage = () => {
   // Receipt State
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [receiptData, setReceiptData] = useState(null);
-  const [isGeneratingReceipt, setIsGeneratingReceipt] = useState(false); 
+  const [isGeneratingReceipt, setIsGeneratingReceipt] = useState(false);
 
   // QR CODE STATE
   const [showQRModal, setShowQRModal] = useState(false);
@@ -116,101 +116,97 @@ const UserRegistrationPage = () => {
 
   // Load Users with NEW TABLE STRUCTURE
   const loadUsers = useCallback(async (mapToUse) => {
-  // REMOVED THE BLOCKING IF STATEMENT
-  // if (!mapToUse || mapToUse.size === 0) return; 
-
-  // Add this safety check instead so the code doesn't crash if map is null
-  const facilityMap = mapToUse || new Map(); 
+    if (!mapToUse || mapToUse.size === 0) return;
     try {
       const usersQuery = query(collection(db, 'users'));
       const usersSnap = await getDocs(usersQuery);
-      
+
       const enrichedUsersPromises = usersSnap.docs
-        .filter(doc => doc.id !== '000info') 
+        .filter(doc => doc.id !== '000info')
         .map(async (userDoc) => {
-        const userData = userDoc.data();
-        const userId = userDoc.id;
+          const userData = userDoc.data();
+          const userId = userDoc.id;
 
-        const subscriptionsRef = collection(db, 'users', userId, 'subscriptions');
-        const subscriptionsSnap = await getDocs(query(subscriptionsRef, orderBy('createdAt', 'desc')));
-        const allSubscriptions = subscriptionsSnap.docs.map(doc => ({ 
-          id: doc.id, 
-          ...doc.data() 
-        }));
+          const subscriptionsRef = collection(db, 'users', userId, 'subscriptions');
+          const subscriptionsSnap = await getDocs(query(subscriptionsRef, orderBy('createdAt', 'desc')));
+          const allSubscriptions = subscriptionsSnap.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }));
 
-        const facilitySubscriptionsMap = new Map();
-        allSubscriptions.forEach(sub => {
-          const facilityId = sub.facilityId;
-          if (!facilitySubscriptionsMap.has(facilityId)) {
-            facilitySubscriptionsMap.set(facilityId, sub);
+          const facilitySubscriptionsMap = new Map();
+          allSubscriptions.forEach(sub => {
+            const facilityId = sub.facilityId;
+            if (!facilitySubscriptionsMap.has(facilityId)) {
+              facilitySubscriptionsMap.set(facilityId, sub);
+            }
+          });
+
+          const today = new Date();
+          const activeSubscriptions = [];
+          const expiredSubscriptions = [];
+
+          facilitySubscriptionsMap.forEach((sub, facilityId) => {
+            const facilityName = mapToUse.get(facilityId)?.name || 'Unknown';
+            const endDate = sub.endDate instanceof Timestamp ? sub.endDate.toDate() : new Date(sub.endDate);
+            const isActive = endDate >= today;
+
+            const subInfo = {
+              facilityId,
+              facilityName,
+              endDate,
+              endDateStr: endDate.toLocaleDateString('en-GB'),
+              isActive
+            };
+
+            if (isActive) {
+              activeSubscriptions.push(subInfo);
+            } else {
+              expiredSubscriptions.push(subInfo);
+            }
+          });
+
+          activeSubscriptions.sort((a, b) => b.endDate - a.endDate);
+          expiredSubscriptions.sort((a, b) => b.endDate - a.endDate);
+
+          const displaySubscriptions = activeSubscriptions.length > 0
+            ? activeSubscriptions
+            : expiredSubscriptions.slice(0, 1);
+
+          let registrationExpiry = 'N/A';
+          if (activeSubscriptions.length > 0) {
+            const longestExpiry = activeSubscriptions[0].endDate;
+            const regExpiryDate = new Date(longestExpiry);
+            regExpiryDate.setMonth(regExpiryDate.getMonth() + 6);
+            registrationExpiry = regExpiryDate.toLocaleDateString('en-GB');
+          } else if (expiredSubscriptions.length > 0) {
+            registrationExpiry = 'Expired';
           }
-        });
 
-        const today = new Date();
-        const activeSubscriptions = [];
-        const expiredSubscriptions = [];
+          const dobParts = userData.dob ? userData.dob.split('/') : ['01', '01', '2000'];
+          const dobForInput = `${dobParts[2]}-${dobParts[1]}-${dobParts[0]}`;
+          const age = new Date().getFullYear() - parseInt(dobParts[2]);
+          const ageCategory = age < 18 ? 'Child' : age < 60 ? 'Adult' : 'Senior';
 
-        facilitySubscriptionsMap.forEach((sub, facilityId) => {
-          const facilityName = facilityMap.get(facilityId)?.name || 'Unknown';
-          const endDate = sub.endDate instanceof Timestamp ? sub.endDate.toDate() : new Date(sub.endDate);
-          const isActive = endDate >= today;
-          
-          const subInfo = {
-            facilityId,
-            facilityName,
-            endDate,
-            endDateStr: endDate.toLocaleDateString('en-GB'),
-            isActive
+          return {
+            id: userId,
+            regNumber: userData.regNumber || 'N/A',
+            name: userData.name || 'Unknown',
+            ageCategory,
+            registrationExpiry,
+            subscriptions: displaySubscriptions,
+            hasActiveSubscriptions: activeSubscriptions.length > 0,
+            allSubscriptions: allSubscriptions,
+            dobForInput,
+            ...userData
           };
-
-          if (isActive) {
-            activeSubscriptions.push(subInfo);
-          } else {
-            expiredSubscriptions.push(subInfo);
-          }
         });
-
-        activeSubscriptions.sort((a, b) => b.endDate - a.endDate);
-        expiredSubscriptions.sort((a, b) => b.endDate - a.endDate);
-
-        const displaySubscriptions = activeSubscriptions.length > 0 
-          ? activeSubscriptions 
-          : expiredSubscriptions.slice(0, 1);
-
-        let registrationExpiry = 'N/A';
-        if (activeSubscriptions.length > 0) {
-          const longestExpiry = activeSubscriptions[0].endDate;
-          const regExpiryDate = new Date(longestExpiry);
-          regExpiryDate.setMonth(regExpiryDate.getMonth() + 6);
-          registrationExpiry = regExpiryDate.toLocaleDateString('en-GB');
-        } else if (expiredSubscriptions.length > 0) {
-          registrationExpiry = 'Expired';
-        }
-
-        const dobParts = userData.dob ? userData.dob.split('/') : ['01', '01', '2000'];
-        const dobForInput = `${dobParts[2]}-${dobParts[1]}-${dobParts[0]}`;
-        const age = new Date().getFullYear() - parseInt(dobParts[2]);
-        const ageCategory = age < 18 ? 'Child' : age < 60 ? 'Adult' : 'Senior';
-
-        return {
-          id: userId,
-          regNumber: userData.regNumber || 'N/A',
-          name: userData.name || 'Unknown',
-          ageCategory,
-          registrationExpiry,
-          subscriptions: displaySubscriptions,
-          hasActiveSubscriptions: activeSubscriptions.length > 0,
-          allSubscriptions: allSubscriptions,
-          dobForInput,
-          ...userData
-        };
-      });
 
       let enrichedUsers = (await Promise.all(enrichedUsersPromises)).filter(Boolean);
 
       enrichedUsers.sort((a, b) => {
-        const numA = parseInt(a.regNumber.replace('SPC', '')) || 0;
-        const numB = parseInt(b.regNumber.replace('SPC', '')) || 0;
+        const numA = parseInt(a.regNumber.replace('RSS', '')) || 0;
+        const numB = parseInt(b.regNumber.replace('RSS', '')) || 0;
         return numA - numB;
       });
 
@@ -223,18 +219,18 @@ const UserRegistrationPage = () => {
 
   useEffect(() => {
     if (!authLoading && staffUser) {
-        const loadInitialData = async () => {
-            setDataLoading(true);
-            try {
-                const loadedFacilitiesMap = await loadFacilities();
-                await loadUsers(loadedFacilitiesMap);
-            } catch (error) {
-                console.error('Error during initial data load:', error);
-            } finally {
-                setDataLoading(false);
-            }
-        };
-        loadInitialData();
+      const loadInitialData = async () => {
+        setDataLoading(true);
+        try {
+          const loadedFacilitiesMap = await loadFacilities();
+          await loadUsers(loadedFacilitiesMap);
+        } catch (error) {
+          console.error('Error during initial data load:', error);
+        } finally {
+          setDataLoading(false);
+        }
+      };
+      loadInitialData();
     }
   }, [authLoading, staffUser, loadFacilities, loadUsers]);
 
@@ -297,8 +293,8 @@ const UserRegistrationPage = () => {
         const fileRef = ref(storage, storagePath);
         await deleteObject(fileRef).catch(err => console.warn("Storage file not found or already deleted", err));
       } else if (imageLink) {
-         const fileRef = ref(storage, imageLink);
-         await deleteObject(fileRef).catch(err => console.warn("Could not delete file from storage ref", err));
+        const fileRef = ref(storage, imageLink);
+        await deleteObject(fileRef).catch(err => console.warn("Could not delete file from storage ref", err));
       }
       setAlert({ show: true, type: 'success', message: 'QR Code deleted.' });
       await loadQRCodes();
@@ -348,15 +344,15 @@ const UserRegistrationPage = () => {
 
   const handleRegisterNewUser = async () => {
     if (!validateForm()) return;
-    const duplicate = users.find(u => 
+    const duplicate = users.find(u =>
       u.mobile === formData.mobile || u.aadharNo === formData.aadharNo
     );
     if (duplicate) {
       setDuplicateWarning({ show: true, user: duplicate });
-      return; 
+      return;
     }
     setLoading(true);
-    setIsGeneratingReceipt(true); 
+    setIsGeneratingReceipt(true);
     try {
       const now = new Date();
       const registrationDate = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
@@ -389,23 +385,23 @@ const UserRegistrationPage = () => {
         nextInvoiceNo = `INV${currentYear}${paddedNum}`;
         transaction.update(paymentInfoRef, { lastInvoice: nextInvoiceNum });
       });
-      const newRegNumber = `SPC${String(nextRegNum).padStart(5, '0')}`;
+      const newRegNumber = `RSS${String(nextRegNum).padStart(4, '0')}`;
       const userData = {
-        name: formData.name, 
-        email: formData.email || '', 
-        mobile: formData.mobile, 
+        name: formData.name,
+        email: formData.email || '',
+        mobile: formData.mobile,
         dob: formattedDob,
-        gender: formData.gender, 
-        fatherName: formData.fatherName || '', 
+        gender: formData.gender,
+        fatherName: formData.fatherName || '',
         address: formData.address,
-        aadharNo: formData.aadharNo, 
+        aadharNo: formData.aadharNo,
         registrationDate: registrationDate,
         regNumber: newRegNumber,
       };
       const userRef = await addDoc(collection(db, 'users'), userData);
       setAlert({ show: true, type: 'success', message: `User registered successfully! ID: ${newRegNumber}.` });
       closeRegistrationModal();
-      setLoading(false); 
+      setLoading(false);
       setIsGeneratingReceipt(false);
       await loadUsers(facilitiesMap);
     } catch (error) {
@@ -441,40 +437,27 @@ const UserRegistrationPage = () => {
 
   const openRegistrationModal = () => {
     setFormData({ ...initialFormData, facilityId: '' });
-    loadQRCodes(); 
+    loadQRCodes();
     setShowRegistrationModal(true);
   };
-  
+
   const closeRegistrationModal = () => {
     setShowRegistrationModal(false);
     setFormData(initialFormData);
   };
-  
-  // ... existing code ...
+
   const openEditModal = async (userToEdit) => {
     setSelectedUser(userToEdit);
     setFormData({
-      // FIX: Add || '' to every field to prevent 'undefined' errors
-      name: userToEdit.name || '',
-      email: userToEdit.email || '',
-      mobile: userToEdit.mobile || '',
-      dob: userToEdit.dobForInput || '',
-      gender: userToEdit.gender || 'Male', // Default to 'Male' if missing, or '' if you prefer
-      fatherName: userToEdit.fatherName || '',
-      address: userToEdit.address || '',
-      aadharNo: userToEdit.aadharNo || '',
-      facilityId: '',
-      planType: 'oneMonth',
+      name: userToEdit.name, email: userToEdit.email, mobile: userToEdit.mobile, dob: userToEdit.dobForInput,
+      gender: userToEdit.gender, fatherName: userToEdit.fatherName, address: userToEdit.address,
+      aadharNo: userToEdit.aadharNo, facilityId: '', planType: 'oneMonth',
       startDate: new Date().toISOString().split('T')[0],
-      isRegistration: false, // Ensure this flag exists in edit mode
-      utrNumber: '',
-      qrCodeId: ''
     });
     await loadUserSubscriptionsAndPayments(userToEdit.id);
     setShowEditModal(true);
   };
-// ... existing code ...
-  
+
   const closeEditModal = () => {
     setShowEditModal(false);
     setSelectedUser(null);
@@ -482,17 +465,17 @@ const UserRegistrationPage = () => {
     setSelectedUserPayments([]);
     setFormData(initialFormData);
   };
-  
+
   const openExtensionModal = (facilityId = '') => {
     setSelectedFacilityForExtension(facilityId);
     setShowExtensionModal(true);
   };
-  
+
   const closeExtensionModal = () => {
     setShowExtensionModal(false);
     setSelectedFacilityForExtension('');
   };
-  
+
   const handleSubscriptionExtended = async (receiptInfo) => {
     closeExtensionModal();
     if (receiptInfo) {
@@ -517,11 +500,11 @@ const UserRegistrationPage = () => {
 
   const filteredUsers = users.filter(userItem => {
     const searchLower = searchTerm.toLowerCase();
-    const matchesSearchTerm = 
+    const matchesSearchTerm =
       (userItem.name || '').toLowerCase().includes(searchLower) ||
       (userItem.regNumber || '').toLowerCase().includes(searchLower) ||
       String(userItem.mobile || '').includes(searchTerm) ||
-      String(userItem.aadharNo || '').includes(searchTerm); 
+      String(userItem.aadharNo || '').includes(searchTerm);
 
     if (!matchesSearchTerm) return false;
 
@@ -569,24 +552,296 @@ const UserRegistrationPage = () => {
 
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.json_to_sheet(exportData);
-      
-      // Auto-size columns slightly
       ws['!cols'] = [
-        { wch: 15 }, // Reg Number
-        { wch: 25 }, // Name
-        { wch: 15 }, // Mobile
-        { wch: 15 }, // Age
-        { wch: 10 }, // Gender
-        { wch: 20 }, // Reg Expiry
-        { wch: 40 }  // Facilities
+        { wch: 15 }, { wch: 25 }, { wch: 15 }, { wch: 15 }, { wch: 10 }, { wch: 20 }, { wch: 40 }
       ];
-
       XLSX.utils.book_append_sheet(wb, ws, 'Users');
-      XLSX.writeFile(wb, `Users_Export_${new Date().toISOString().slice(0,10)}.xlsx`);
+      XLSX.writeFile(wb, `Users_Export_${new Date().toISOString().slice(0, 10)}.xlsx`);
       setAlert({ show: true, type: 'success', message: 'Excel exported successfully!' });
     } catch (error) {
       console.error('Export Error:', error);
       setAlert({ show: true, type: 'error', message: 'Failed to export Excel' });
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
+  // --- COMPREHENSIVE FULL MEMBER REPORT EXPORT ---
+  const exportFullMemberReport = async () => {
+    if (users.length === 0) {
+      setAlert({ show: true, type: 'error', message: 'No member data to export' });
+      return;
+    }
+    setExportLoading(true);
+    setAlert({ show: true, type: 'success', message: 'Preparing full report... Please wait.' });
+
+    try {
+      const now = new Date();
+      const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const currentMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+      const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+      const formatDateFromTimestamp = (ts) => {
+        if (!ts) return 'N/A';
+        try {
+          const d = ts.toDate ? ts.toDate() : new Date(ts);
+          return d.toLocaleDateString('en-GB');
+        } catch { return 'N/A'; }
+      };
+
+      const formatDateTimeFromTimestamp = (ts) => {
+        if (!ts) return 'N/A';
+        try {
+          const d = ts.toDate ? ts.toDate() : new Date(ts);
+          return d.toLocaleDateString('en-GB') + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+        } catch { return 'N/A'; }
+      };
+
+      // Step 1: Load facilities map
+      const facSnap = await getDocs(collection(db, 'facilities'));
+      const facilitiesMapFull = new Map();
+      facSnap.docs.forEach(d => facilitiesMapFull.set(d.id, d.data().name || d.id));
+
+      // Step 2: For each user, load all subscriptions and last payment
+      const allUsersRaw = users; // Already loaded in component state
+
+      const enrichedForExport = await Promise.all(allUsersRaw.map(async (u) => {
+        // Load ALL subscriptions for this user
+        const subSnap = await getDocs(query(
+          collection(db, 'users', u.id, 'subscriptions'),
+          orderBy('createdAt', 'desc')
+        ));
+        const allSubs = subSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+        // Load last payment for this user
+        const lastPaySnap = await getDocs(query(
+          collection(db, 'payments'),
+          where('userId', '==', u.id),
+          orderBy('paymentDate', 'desc'),
+          limit(1)
+        ));
+        const lastPayment = lastPaySnap.empty ? null : { id: lastPaySnap.docs[0].id, ...lastPaySnap.docs[0].data() };
+
+        // Determine per-facility subscription status
+        const facilitySubMap = new Map();
+        allSubs.forEach(sub => {
+          const fid = sub.facilityId;
+          if (!facilitySubMap.has(fid)) facilitySubMap.set(fid, sub);
+        });
+
+        const subscriptionDetails = [];
+        facilitySubMap.forEach((sub, fid) => {
+          const endDate = sub.endDate ? (sub.endDate.toDate ? sub.endDate.toDate() : new Date(sub.endDate)) : null;
+          const isActive = endDate ? endDate >= todayMidnight : false;
+          const hasCurrentMonth = endDate ? (endDate >= currentMonthStart) : false;
+          subscriptionDetails.push({
+            facilityName: facilitiesMapFull.get(fid) || fid,
+            planType: sub.planType || 'N/A',
+            startDate: formatDateFromTimestamp(sub.startDate),
+            endDate: endDate ? endDate.toLocaleDateString('en-GB') : 'N/A',
+            endDateRaw: endDate,
+            isActive,
+            hasCurrentMonth,
+            status: sub.status || 'N/A',
+          });
+        });
+
+        const hasActiveSubThisMonth = subscriptionDetails.some(s => s.hasCurrentMonth);
+        const hasAnyActiveSub = subscriptionDetails.some(s => s.isActive);
+
+        // Registration validity: active sub → reg valid 6 months after longest active sub
+        let registrationStatus = 'N/A';
+        let registrationLastDate = 'N/A';
+        if (subscriptionDetails.length > 0) {
+          const activeSubs = subscriptionDetails.filter(s => s.isActive);
+          if (activeSubs.length > 0) {
+            const longestEnd = activeSubs.reduce((a, b) => (a.endDateRaw > b.endDateRaw ? a : b));
+            const regExpiry = new Date(longestEnd.endDateRaw);
+            regExpiry.setMonth(regExpiry.getMonth() + 6);
+            registrationStatus = regExpiry >= todayMidnight ? 'Active' : 'Expired';
+            registrationLastDate = regExpiry.toLocaleDateString('en-GB');
+          } else {
+            const latestExpired = subscriptionDetails.reduce((a, b) => (a.endDateRaw > b.endDateRaw ? a : b));
+            const regExpiry = new Date(latestExpired.endDateRaw);
+            regExpiry.setMonth(regExpiry.getMonth() + 6);
+            registrationStatus = 'Expired';
+            registrationLastDate = regExpiry.toLocaleDateString('en-GB');
+          }
+        }
+
+        // DOB and age
+        const dobParts = u.dob ? u.dob.split('/') : null;
+        const age = dobParts ? (now.getFullYear() - parseInt(dobParts[2])) : 'N/A';
+
+        return {
+          id: u.id,
+          regNumber: u.regNumber || 'N/A',
+          name: u.name || 'N/A',
+          mobile: u.mobile || 'N/A',
+          email: u.email || '',
+          gender: u.gender || 'N/A',
+          dob: u.dob || 'N/A',
+          age,
+          ageCategory: u.ageCategory || 'N/A',
+          fatherName: u.fatherName || '',
+          address: u.address || '',
+          aadharNo: u.aadharNo || '',
+          registrationDate: u.registrationDate || 'N/A',
+          registrationStatus,
+          registrationLastDate,
+          subscriptionDetails,
+          hasActiveSubThisMonth,
+          hasAnyActiveSub,
+          lastPayment,
+        };
+      }));
+
+      // ===============================================================
+      // SHEET 1: All Members with Full Details
+      // ===============================================================
+      const sheet1Data = [];
+      enrichedForExport.forEach(u => {
+        const lastPayFacility = u.lastPayment
+          ? (facilitiesMapFull.get(u.lastPayment.facilityId) || u.lastPayment.facility?.name || 'N/A')
+          : 'N/A';
+        const lastPayMonths = u.lastPayment?.month ? u.lastPayment.month.join(', ') : 'N/A';
+
+        if (u.subscriptionDetails.length === 0) {
+          // Member with no subscriptions at all
+          sheet1Data.push({
+            'Reg No': u.regNumber,
+            'Name': u.name,
+            'Mobile': u.mobile,
+            'Email': u.email,
+            'Gender': u.gender,
+            'DOB': u.dob,
+            'Age': u.age,
+            'Age Category': u.ageCategory,
+            'Father Name': u.fatherName,
+            'Address': u.address,
+            'Aadhar No': u.aadharNo,
+            'Registration Date': u.registrationDate,
+            'Reg Status': u.registrationStatus,
+            'Reg Valid Till': u.registrationLastDate,
+            'Facility': 'No Subscription',
+            'Plan Type': 'N/A',
+            'Sub Start Date': 'N/A',
+            'Sub End Date': 'N/A',
+            'Sub Status': 'N/A',
+            'Active This Month': 'No',
+            'Last Payment Date': formatDateTimeFromTimestamp(u.lastPayment?.paymentDate),
+            'Last Payment Amount (₹)': u.lastPayment?.amount ?? 'N/A',
+            'Last Payment Method': u.lastPayment?.method || 'N/A',
+            'Last Payment Status': u.lastPayment?.status || 'N/A',
+            'Last Payment Invoice': u.lastPayment?.invoiceNo || 'N/A',
+            'Last Payment Facility': lastPayFacility,
+            'Last Payment Months': lastPayMonths,
+          });
+        } else {
+          u.subscriptionDetails.forEach(sub => {
+            sheet1Data.push({
+              'Reg No': u.regNumber,
+              'Name': u.name,
+              'Mobile': u.mobile,
+              'Email': u.email,
+              'Gender': u.gender,
+              'DOB': u.dob,
+              'Age': u.age,
+              'Age Category': u.ageCategory,
+              'Father Name': u.fatherName,
+              'Address': u.address,
+              'Aadhar No': u.aadharNo,
+              'Registration Date': u.registrationDate,
+              'Reg Status': u.registrationStatus,
+              'Reg Valid Till': u.registrationLastDate,
+              'Facility': sub.facilityName,
+              'Plan Type': sub.planType,
+              'Sub Start Date': sub.startDate,
+              'Sub End Date': sub.endDate,
+              'Sub Status': sub.isActive ? 'Active' : 'Expired',
+              'Active This Month': sub.hasCurrentMonth ? 'Yes' : 'No',
+              'Last Payment Date': formatDateTimeFromTimestamp(u.lastPayment?.paymentDate),
+              'Last Payment Amount (₹)': u.lastPayment?.amount ?? 'N/A',
+              'Last Payment Method': u.lastPayment?.method || 'N/A',
+              'Last Payment Status': u.lastPayment?.status || 'N/A',
+              'Last Payment Invoice': u.lastPayment?.invoiceNo || 'N/A',
+              'Last Payment Facility': lastPayFacility,
+              'Last Payment Months': lastPayMonths,
+            });
+          });
+        }
+      });
+
+      // ===============================================================
+      // SHEET 2: Pending Members (No Active Subscription This Month)
+      // ===============================================================
+      const pendingMembers = enrichedForExport.filter(u => !u.hasActiveSubThisMonth);
+
+      const sheet2Data = pendingMembers.map(u => {
+        // Last subscription end date across all facilities
+        let lastSubEndDate = 'N/A';
+        if (u.subscriptionDetails.length > 0) {
+          const validDates = u.subscriptionDetails.filter(s => s.endDateRaw);
+          if (validDates.length > 0) {
+            const latest = validDates.reduce((a, b) => (a.endDateRaw > b.endDateRaw ? a : b));
+            lastSubEndDate = latest.endDate;
+          }
+        }
+
+        const facilitiesInfo = u.subscriptionDetails.length > 0
+          ? u.subscriptionDetails.map(s => `${s.facilityName} (till ${s.endDate})`).join('; ')
+          : 'No subscription records';
+
+        return {
+          'Reg No': u.regNumber,
+          'Name': u.name,
+          'Mobile': u.mobile,
+          'Gender': u.gender,
+          'Age Category': u.ageCategory,
+          'Registration Status': u.registrationStatus,
+          'Reg Last Active Date': u.registrationLastDate,
+          'Subscribed Facilities': facilitiesInfo,
+          'Last Subscription End Date': lastSubEndDate,
+          'Has Any Active Sub': u.hasAnyActiveSub ? 'Yes (different month)' : 'No',
+          'Last Payment Date': formatDateTimeFromTimestamp(u.lastPayment?.paymentDate),
+          'Last Payment Amount (₹)': u.lastPayment?.amount ?? 'N/A',
+          'Last Payment Method': u.lastPayment?.method || 'N/A',
+          'Last Payment Status': u.lastPayment?.status || 'N/A',
+          'Last Payment Invoice': u.lastPayment?.invoiceNo || 'N/A',
+        };
+      });
+
+      // ===============================================================
+      // BUILD WORKBOOK
+      // ===============================================================
+      const wb = XLSX.utils.book_new();
+
+      // Sheet 1
+      const ws1 = XLSX.utils.json_to_sheet(sheet1Data);
+      ws1['!cols'] = [
+        { wch: 12 }, { wch: 24 }, { wch: 14 }, { wch: 22 }, { wch: 8 }, { wch: 12 }, { wch: 6 }, { wch: 12 },
+        { wch: 20 }, { wch: 30 }, { wch: 16 }, { wch: 20 }, { wch: 12 }, { wch: 16 },
+        { wch: 22 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 10 }, { wch: 16 },
+        { wch: 22 }, { wch: 20 }, { wch: 18 }, { wch: 14 }, { wch: 18 }, { wch: 20 }, { wch: 30 },
+      ];
+      XLSX.utils.book_append_sheet(wb, ws1, 'All Members');
+
+      // Sheet 2
+      const ws2 = XLSX.utils.json_to_sheet(sheet2Data.length > 0 ? sheet2Data : [{ 'Info': 'No pending members found for this month.' }]);
+      ws2['!cols'] = [
+        { wch: 12 }, { wch: 24 }, { wch: 14 }, { wch: 8 }, { wch: 12 },
+        { wch: 18 }, { wch: 20 }, { wch: 40 }, { wch: 22 }, { wch: 22 },
+        { wch: 22 }, { wch: 20 }, { wch: 18 }, { wch: 14 }, { wch: 18 },
+      ];
+      XLSX.utils.book_append_sheet(wb, ws2, 'Pending Members');
+
+      const fileName = `Members_Full_Report_${now.toISOString().slice(0, 10)}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+
+      setAlert({ show: true, type: 'success', message: `Full report exported! (${enrichedForExport.length} members, ${pendingMembers.length} pending)` });
+    } catch (error) {
+      console.error('Full Export Error:', error);
+      setAlert({ show: true, type: 'error', message: `Failed to export full report: ${error.message}` });
     } finally {
       setExportLoading(false);
     }
@@ -598,7 +853,7 @@ const UserRegistrationPage = () => {
       return;
     }
     setExportLoading(true);
-    
+
     const printWindow = window.open('', '_blank');
     const tableRows = filteredUsers.map((u, i) => `
       <tr class="${i % 2 === 0 ? 'even' : 'odd'}">
@@ -700,25 +955,25 @@ const UserRegistrationPage = () => {
         </div>
       </div>
 
-    
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
           <div className="flex items-center justify-between">
-   
+
             <div><p className="text-sm text-gray-600">Total Users</p><p className="text-2xl font-bold text-gray-900">{filteredUsers.length}</p></div>
             <Users className="text-blue-500" size={32} />
           </div>
         </div>
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
           <div className="flex items-center justify-between">
-            
+
             <div><p className="text-sm text-gray-600">Active Subscriptions</p><p className="text-2xl font-bold text-green-600">{filteredUsers.filter(u => u.hasActiveSubscriptions).length}</p></div>
             <CheckCircle className="text-green-500" size={32} />
           </div>
         </div>
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
           <div className="flex items-center justify-between">
-          
+
             <div><p className="text-sm text-gray-600">No Active Subscription</p><p className="text-2xl font-bold text-red-600">{filteredUsers.filter(u => !u.hasActiveSubscriptions).length}</p></div>
             <AlertCircle className="text-red-500" size={32} />
           </div>
@@ -726,85 +981,98 @@ const UserRegistrationPage = () => {
       </div>
       {/* Search & Register Button */}
       <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-6">
-  <div className="flex flex-wrap gap-4 items-center justify-between">
-    <input
-      type="text"
-      placeholder="Search by name, reg#, mobile, or aadhar..." 
-      value={searchTerm}
-      onChange={(e) => setSearchTerm(e.target.value)}
-      className="flex-1 min-w-64 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-    />
+        <div className="flex flex-wrap gap-4 items-center justify-between">
+          <input
+            type="text"
+            placeholder="Search by name, reg#, mobile, or aadhar..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="flex-1 min-w-64 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
 
-    {/* Facility Filter */}
-    <select
-      value={selectedFacilityFilter}
-      onChange={(e) => setSelectedFacilityFilter(e.target.value)}
-      className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-    >
-      <option value="all">All Facilities</option>
-      {facilities.map(f => (
-        <option key={f.id} value={f.id}>{f.name}</option>
-      ))}
-    </select>
+          {/* Facility Filter */}
+          <select
+            value={selectedFacilityFilter}
+            onChange={(e) => setSelectedFacilityFilter(e.target.value)}
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            <option value="all">All Facilities</option>
+            {facilities.map(f => (
+              <option key={f.id} value={f.id}>{f.name}</option>
+            ))}
+          </select>
 
-    {/* Expiry Status Filter */}
-    <select
-      value={filterExpiryStatus}
-      onChange={(e) => setFilterExpiryStatus(e.target.value)}
-      className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-    >
-      <option value="all">All Subscriptions</option>
-      <option value="active">Active Subscriptions</option>
-      <option value="expired">Expired Subscriptions</option>
-    </select>
+          {/* Expiry Status Filter */}
+          <select
+            value={filterExpiryStatus}
+            onChange={(e) => setFilterExpiryStatus(e.target.value)}
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            <option value="all">All Subscriptions</option>
+            <option value="active">Active Subscriptions</option>
+            <option value="expired">Expired Subscriptions</option>
+          </select>
 
-    {/* Age Category Filter */}
-    <select
-      value={filterAgeCategory}
-      onChange={(e) => setFilterAgeCategory(e.target.value)}
-      className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-    >
-      <option value="all">All Age Categories</option>
-      <option value="Child">Child</option>
-      <option value="Adult">Adult</option>
-      <option value="Senior">Senior</option>
-    </select>
+          {/* Age Category Filter */}
+          <select
+            value={filterAgeCategory}
+            onChange={(e) => setFilterAgeCategory(e.target.value)}
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            <option value="all">All Age Categories</option>
+            <option value="Child">Child</option>
+            <option value="Adult">Adult</option>
+            <option value="Senior">Senior</option>
+          </select>
 
-    {/* Gender Filter */}
-    <select
-      value={filterGender}
-      onChange={(e) => setFilterGender(e.target.value)}
-      className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-    >
-      <option value="all">All Genders</option>
-      <option value="Male">Male</option>
-      <option value="Female">Female</option>
-    </select>
+          {/* Gender Filter */}
+          <select
+            value={filterGender}
+            onChange={(e) => setFilterGender(e.target.value)}
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            <option value="all">All Genders</option>
+            <option value="Male">Male</option>
+            <option value="Female">Female</option>
+          </select>
 
-    {/* EXPORT BUTTONS */}
-    <div className="flex gap-2">
-      <button 
-        onClick={exportToPDF} 
-        disabled={exportLoading}
-        className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors flex items-center gap-1"
-        title="Export PDF"
-      >
-        <FileDown size={18} />
-      </button>
-      <button 
-        onClick={exportToExcel}
-        disabled={exportLoading} 
-        className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors flex items-center gap-1"
-        title="Export Excel"
-      >
-        <Download size={18} />
-      </button>
-    </div>
+          {/* EXPORT BUTTONS */}
+          <div className="flex gap-2">
+            <button
+              onClick={exportToPDF}
+              disabled={exportLoading}
+              className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors flex items-center gap-1"
+              title="Export PDF (Simple)"
+            >
+              <FileDown size={18} />
+            </button>
+            <button
+              onClick={exportToExcel}
+              disabled={exportLoading}
+              className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors flex items-center gap-1"
+              title="Export Excel (Simple)"
+            >
+              <Download size={18} />
+            </button>
+            <button
+              onClick={exportFullMemberReport}
+              disabled={exportLoading}
+              className="px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors flex items-center gap-2"
+              title="Export Full Member Report (All Members + Pending Members - 2 Sheets)"
+            >
+              {exportLoading ? (
+                <Loader2 size={18} className="animate-spin" />
+              ) : (
+                <FileDown size={18} />
+              )}
+              <span className="text-xs font-semibold">Full Report</span>
+            </button>
+          </div>
 
-    <button onClick={openRegistrationModal} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2">
-      <User size={18} />Register New User
-    </button>
-  
+          <button onClick={openRegistrationModal} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2">
+            <User size={18} />Register New User
+          </button>
+
         </div>
       </div>
 
@@ -850,49 +1118,49 @@ const UserRegistrationPage = () => {
                         <span className="text-gray-400 italic">No active plan</span>
                       )}
                     </td>
-                  <td className="px-6 py-4 text-sm">
-                    <div className="space-y-1">
-                      {userItem.subscriptions.length > 0 ? (
-                        userItem.subscriptions.map((sub, idx) => (
-                          <div key={idx} className={`${sub.isActive ? 'text-green-600 font-medium' : 'text-gray-500'}`}>
-                            {sub.endDateStr}
-                          </div>
-                        ))
-                      ) : (
-                        <span className="text-gray-400">-</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 text-sm font-medium">
-                    <div className="flex items-center gap-2">
-                      <button 
-                        onClick={() => openEditModal(userItem)}
-                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                        title="Edit User"
-                      >
-                        <Edit size={18} />
-                      </button>
-                      <button 
-                        onClick={() => {
-                          setSelectedUser(userItem);
-                          openExtensionModal();
-                        }}
-                        className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                        title="Renew/Extend Subscription"
-                      >
-                        <RefreshCcw size={18} />
-                      </button>
-                       <button 
-                        onClick={() => handleDeleteUser(userItem.id)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Delete User"
-                      >
-                        <Trash2 size={18} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              )))}
+                    <td className="px-6 py-4 text-sm">
+                      <div className="space-y-1">
+                        {userItem.subscriptions.length > 0 ? (
+                          userItem.subscriptions.map((sub, idx) => (
+                            <div key={idx} className={`${sub.isActive ? 'text-green-600 font-medium' : 'text-gray-500'}`}>
+                              {sub.endDateStr}
+                            </div>
+                          ))
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-sm font-medium">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => openEditModal(userItem)}
+                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          title="Edit User"
+                        >
+                          <Edit size={18} />
+                        </button>
+                        <button
+                          onClick={() => {
+                            setSelectedUser(userItem);
+                            openExtensionModal();
+                          }}
+                          className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                          title="Renew/Extend Subscription"
+                        >
+                          <RefreshCcw size={18} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteUser(userItem.id)}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Delete User"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )))}
             </tbody>
           </table>
         </div>
@@ -910,7 +1178,7 @@ const UserRegistrationPage = () => {
         selectedFacility={selectedFacility}
         calculatedFee={calculatedFee}
         isEditMode={false}
-        qrCodes={qrCodes} 
+        qrCodes={qrCodes}
       />
 
       {/* EDIT USER MODAL */}
@@ -927,10 +1195,10 @@ const UserRegistrationPage = () => {
         userSubscriptions={selectedUserSubscriptions}
         userPayments={selectedUserPayments}
         onExtendSubscriptionClick={() => {
-            closeEditModal();
-            openExtensionModal();
+          closeEditModal();
+          openExtensionModal();
         }}
-        qrCodes={qrCodes} 
+        qrCodes={qrCodes}
       />
 
       {/* SUBSCRIPTION EXTENSION MODAL */}
@@ -957,7 +1225,7 @@ const UserRegistrationPage = () => {
               <p className="text-gray-600 mb-6">
                 A user with this mobile number or Aadhar already exists in the system.
               </p>
-              
+
               <div className="bg-gray-50 rounded-lg p-4 w-full mb-6 border border-gray-200 text-left">
                 <p className="text-sm text-gray-500 mb-1">Existing User Details:</p>
                 <div className="grid grid-cols-2 gap-2 text-sm">
@@ -973,17 +1241,17 @@ const UserRegistrationPage = () => {
               </div>
 
               <div className="flex flex-col w-full gap-3">
-                <button 
+                <button
                   onClick={() => setDuplicateWarning({ show: false, user: null })}
                   className="w-full py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
                 >
                   Edit New User Details & Proceed
                 </button>
-                <button 
+                <button
                   onClick={() => {
                     setDuplicateWarning({ show: false, user: null });
                     closeRegistrationModal();
-                  }} 
+                  }}
                   className="w-full py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors"
                 >
                   Cancel Registration
@@ -995,7 +1263,7 @@ const UserRegistrationPage = () => {
       )}
 
       {/* PAYMENT RECEIPT MODAL */}
-      <PaymentReceiptModal 
+      <PaymentReceiptModal
         isOpen={showReceiptModal}
         onClose={() => setShowReceiptModal(false)}
         data={receiptData}
